@@ -1,0 +1,73 @@
+from playwright.sync_api import sync_playwright
+import re, sys
+URL='http://localhost:3999/'
+errs=[]; fails=[]
+def check(c,msg):
+    if not c: fails.append(msg); print('FALLA:',msg)
+
+def mk(b,name):
+    ctx=b.new_context(viewport={'width':400,'height':820})
+    ctx.route('**/*',lambda r: r.continue_() if r.request.url.startswith('http://localhost') else r.abort())
+    pg=ctx.new_page()
+    pg.on('pageerror',lambda e:errs.append(name+': '+str(e)))
+    pg.on('console',lambda m: errs.append(name+' console: '+m.text) if m.type=='error' and 'ERR_FAILED' not in m.text else None)
+    return pg
+
+with sync_playwright() as p:
+    b=p.chromium.launch()
+    A=mk(b,'A'); B=mk(b,'B')
+
+    # --- A: crear cuenta y hogar
+    A.goto(URL); A.wait_for_selector('#g_email')
+    A.click('text=Crear cuenta'); A.fill('#g_name','Gabo'); A.fill('#g_email','gabo@casa.com'); A.fill('#g_pass','clave-segura-1')
+    A.click('button[type=submit]'); A.wait_for_selector('text=Crear hogar nuevo')
+    A.click('text=Crear hogar nuevo'); A.wait_for_selector('#appRoot:not([hidden])')
+    A.wait_for_function("document.querySelector('#hhCode').textContent.length===6")
+    code=A.inner_text('#hhCode'); print('codigo',code)
+    check(A.is_visible('#inviteNote'),'A ve el aviso con el código')
+
+    # --- A: despensa
+    A.click('#addItem'); A.fill('#f_name','Arroz'); A.fill('#f_qty','1'); A.fill('#f_min','2')
+    A.click('#sheetBody button[type=submit]'); A.wait_for_selector('#invList >> text=Arroz')
+    check('por comprar' in A.inner_text('#invTop').lower(),'A: arroz queda en Por comprar')
+
+    # --- B: cuenta y unirse
+    B.goto(URL); B.wait_for_selector('#g_email')
+    B.click('text=Crear cuenta'); B.fill('#g_name','Ana'); B.fill('#g_email','ana@casa.com'); B.fill('#g_pass','clave-segura-2')
+    B.click('button[type=submit]'); B.wait_for_selector('#g_code')
+    B.fill('#g_code',code.lower()); B.click('text=Unirme con código'); B.wait_for_selector('#appRoot:not([hidden])')
+    B.wait_for_selector('#invList >> text=Arroz', timeout=9000)
+    check(True,'B ve el arroz')
+    check('Gabo' in B.inner_text('#people') and 'Ana' in B.inner_text('#people') or 'Tú' in B.inner_text('#people'),'B ve a las dos personas')
+
+    # --- B repone arroz -> A lo ve (sondeo ~6 s)
+    B.click('text=Comprado')
+    A.wait_for_function("document.querySelectorAll('#invTop .btn').length===0", timeout=12000)
+    check(True,'A ve que B repuso el arroz')
+
+    # --- Gastos: B paga el súper
+    B.click('[data-tab=gastos]'); B.click('#addExp'); B.fill('#f_amount','60000'); B.fill('#f_desc','Automercado')
+    B.click('#sheetBody button[type=submit]'); B.wait_for_selector('#expMount >> text=Automercado')
+    A.click('[data-tab=gastos]'); A.wait_for_selector('#expMount >> text=Automercado', timeout=12000)
+    t=A.inner_text('#expMount'); print('A gastos:',t.replace('\n',' | ')[:200])
+    check('Ana te' not in t and ('le debes' in t.lower() and '30 000' in t.replace(' ',' ')),'A le debe 30 000 a Ana')
+
+    # --- Presupuesto privado
+    A.click('[data-tab=presupuesto]'); A.click('#addEntry'); A.fill('#f_amount','7000'); A.fill('#f_desc','secreto-de-A')
+    A.click('#sheetBody button[type=submit]'); A.wait_for_selector('#budMount >> text=secreto-de-A')
+    B.click('[data-tab=presupuesto]'); B.wait_for_timeout(7500)
+    check('secreto-de-A' not in B.inner_text('#budMount'),'B no ve movimientos de A')
+    check('Gastos compartidos (tu parte)' in A.inner_text('#budMount') and '30' in A.inner_text('#budMount'),'A descuenta su parte de gastos compartidos')
+
+    # --- Persistencia: recargar A mantiene sesión y datos
+    A.reload(); A.wait_for_selector('#appRoot:not([hidden])'); A.click('[data-tab=presupuesto]'); A.wait_for_selector('#budMount >> text=secreto-de-A')
+    check(True,'A recarga y conserva sesión y datos')
+    w=A.evaluate('document.documentElement.scrollWidth'); check(w<=400,'sin scroll horizontal ('+str(w)+')')
+
+    # --- Salir
+    A.click('#logout'); A.wait_for_selector('#g_email'); check(True,'salir lleva al login')
+    b.close()
+
+print('ERRORES JS:',errs)
+print('FALLAS:',fails if fails else 'ninguna')
+sys.exit(1 if fails or errs else 0)
