@@ -179,14 +179,14 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
 <main id="gate" class="gate" hidden></main>
 <div class="app" id="appRoot" hidden>
   <header class="top">
-    <h1>Casa en Orden<span class="ver">v3</span></h1>
+    <h1>Casa en Orden<span class="ver">v4</span></h1>
     <div class="people" id="people" aria-label="Personas del hogar"></div>
     <button type="button" class="btn ghost sm" id="logout">Salir</button>
   </header>
   <div class="notices">
     <p class="notice warn" id="net" role="status" hidden></p>
-    <p class="notice" id="roNote" hidden>Tienes acceso de solo lectura. Pide a tu pareja que te comparta la página como Colaborador para poder editar.</p>
-    <p class="notice" id="inviteNote" hidden>Tu pareja entra con el código <b id="hhCode" class="mono"></b>: que cree su cuenta y elija "Unirme con código".</p>
+    <p class="notice" id="roNote" hidden>Tienes acceso de solo lectura.</p>
+    <p class="notice" id="inviteNote" hidden>Código del hogar: <b id="hhCode" class="mono"></b>. La otra persona crea su cuenta y elige "Unirme con código".</p>
   </div>
 
   <section data-panel="despensa" aria-labelledby="h-desp">
@@ -251,6 +251,10 @@ const QUICK_BILLS=['Alquiler','Electricidad','Agua','Internet','Teléfono'];
 const EXP_CATS=[['super','Supermercado'],['feria','Feria y verduras'],['hogar','Limpieza y hogar'],['salud','Farmacia y salud'],['transporte','Transporte'],['salidas','Restaurantes y salidas'],['otros','Otros']];
 const QUICK_EXP=[['Supermercado','super'],['Feria','feria'],['Farmacia','salud'],['Gasolina','transporte'],['Restaurante','salidas']];
 const TABS=['despensa','recibos','gastos','presupuesto'];
+// Lista base de la casa (lista-despensa-casa-en-orden.md): se carga con un botón cuando la despensa está vacía.
+const BASE_FOOD=['Lechugas','Patilla','Salmas','Galletas de soya','Yogur natural sin sabor','Limones','Uvas verdes','Manzanas verdes','Arroz','Arroz basmati','Garbanzos naturales','Lentejas','Pasta spaghetti de arroz','Petit pois','Ciruelas','Sardinas','Atún en trozos','Calamares','Risotto','Salsa de tomate Sacla','Fresco en polvo','Gelatina light','Harina de arroz','Mezcla para pancake gluten free','Masa para tortillas','Maizena / Vitamaíz','Salsa Worcestershire','Aderezo','Leche condensada','Leche deslactosada','Huevos','Queso crema','Jaleas','Quesos','Jamón','Salsa de soya sin gluten','Cacao sin azúcar en polvo','Mantequilla','Pasta de tomate','Salchichas','Papa','Yuca','Camote','Tomate','Chile dulce','Zanahoria','Rábano','Cebolla morada','Pepinos','Espinaca','Peras','Melocotones','Naranjas / mandarinas','Té','Sorbetos sin gluten','Galletas de arroz'];
+const BASE_CLEAN=['Papel higiénico','Toalla de cocina','Servilletas','Jabón de manos','Jabón lavaplatos','Cloro','Desinfectante','Vinagre blanco','Esponjas lavaplatos'];
+const BASE_LIST=[...BASE_FOOD.map(n=>[n,'comida']),...BASE_CLEAN.map(n=>[n,'limpieza'])];
 const catLabel=k=>(INV_CATS.find(c=>c[0]===k)||[0,'Otro'])[1];
 const budLabel=k=>(BUD_CATS.find(c=>c[0]===k)||[0,'Otros'])[1];
 const expLabel=k=>(EXP_CATS.find(c=>c[0]===k)||[0,'Otros'])[1];
@@ -294,7 +298,7 @@ const pending=new Map();
 
 /* ---------- Personas ---------- */
 function memberIds(){const ids=S.members.map(m=>m.id); if(S.uid&&!ids.includes(S.uid)) ids.push(S.uid); return ids;}
-function nm(id){ if(id===S.uid) return 'Tú'; const p=S.profiles[id]; return first(p&&p.name)||'Tu pareja'; }
+function nm(id){ if(id===S.uid) return 'Tú'; const p=S.profiles[id]; return first(p&&p.name)||'La otra persona'; }
 function shareOf(bill,id){
   const ids=memberIds(); if(!ids.includes(id)) return 0;
   if(ids.length===2){ const pct=bill&&typeof bill.split==='number'?bill.split:50; return ids[0]===id?pct:100-pct; }
@@ -464,9 +468,9 @@ function openItemSheet(it){
       {id:'cat',label:'Tipo',type:'select',options:INV_CATS,value:edit?it.cat:(S.invCat!=='todo'?S.invCat:'comida')},
       {id:'qty',label:'Cantidad actual',type:'number',required:true,min:0,value:edit?it.qty:1},
       {id:'unit',label:'Unidad',type:'select',options:UNITS.map(u=>[u,u]),value:edit?it.unit:'unid.'},
-      {id:'min',label:'Avisar al llegar a',type:'number',min:0,value:edit?it.min:1,hint:'Cuando quede esta cantidad o menos, pasa a Por comprar.'},
-      {id:'target',label:'Cantidad al reponer',type:'number',min:0,value:edit?it.target:'',hint:'Opcional. Si lo dejas vacío se usa el doble del mínimo.'},
-      {id:'expires',label:'Vence',type:'date',value:edit?it.expires:'',hint:'Opcional, para comida perecedera.'}
+      {id:'min',label:'Avisar al llegar a',type:'number',min:0,value:edit?it.min:1,hint:'Con esta cantidad o menos pasa a Por comprar.'},
+      {id:'target',label:'Cantidad al reponer',type:'number',min:0,value:edit?it.target:'',hint:'Opcional; vacío = el doble del mínimo.'},
+      {id:'expires',label:'Vence',type:'date',value:edit?it.expires:'',hint:'Opcional.'}
     ],
     onSubmit:v=>guard(async()=>{
       const ref=edit?S.db.doc('inventory/'+it.id):S.db.collection('inventory').doc();
@@ -475,6 +479,24 @@ function openItemSheet(it){
     }),
     extra:edit?[{label:'Eliminar artículo',confirm:'Confirmar: eliminar',onClick:()=>guard(async()=>{await S.db.doc('inventory/'+it.id).delete();})}]:[]
   });
+}
+// Carga la lista base en la despensa (ids fijos "base-…", así no se duplica si se pulsa dos veces).
+let baseLoading=false;
+async function loadBaseList(){
+  if(baseLoading) return; baseLoading=true;
+  const b=$('#loadBase'); if(b){b.disabled=true;b.textContent='Cargando…';}
+  const slug=n=>'base-'+norm(n).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  try{
+    await guard(async()=>{
+      let done=0;
+      for(let i=0;i<BASE_LIST.length;i+=8){
+        await Promise.all(BASE_LIST.slice(i,i+8).map(([name,cat])=>S.db.doc('inventory/'+slug(name)).set({name,cat,qty:1,unit:'unid.',min:0,target:null,expires:null,createdBy:S.uid||null,updatedAt:iso()})));
+        done=Math.min(i+8,BASE_LIST.length); if(b) b.textContent='Cargando… '+done+'/'+BASE_LIST.length;
+      }
+      toast('Lista base cargada: '+done+' artículos.');
+    });
+  }catch(e){ if(b){b.disabled=false;b.textContent='Cargar lista base ('+BASE_LIST.length+' artículos)';} }
+  finally{ baseLoading=false; }
 }
 function invRow(it){
   const buy=needsBuy(it),ex=expState(it),pills=[];
@@ -514,8 +536,10 @@ function renderInvList(){
   const m=$('#invList'); m.replaceChildren();
   if(S.status!=='ok'||!S.ready.inventory) return;
   if(!S.inventory.length){
-    m.append(emptyBox('La despensa está vacía','Agrega lo que tienes en casa: comida, productos de limpieza y cosas de la casa. Define un mínimo y la app avisa cuándo comprar.',
-      h('button',{type:'button',class:'btn',onClick:()=>openItemSheet(null)},'Agregar el primer artículo')));
+    m.append(emptyBox('La despensa está vacía','Agrega artículos o carga la lista base.',
+      h('div',{class:'chips center'},
+        h('button',{type:'button',class:'btn',onClick:()=>openItemSheet(null)},'Agregar el primer artículo'),
+        h('button',{type:'button',class:'btn ghost',id:'loadBase',onClick:loadBaseList},'Cargar lista base ('+BASE_LIST.length+' artículos)'))));
     return;
   }
   const q=norm(S.q);
@@ -612,7 +636,7 @@ function openSettleSheet(){
 }
 function balanceBox(){
   const ids=memberIds(), bal=balances(); let big,small=null,canSettle=false;
-  if(ids.length<2){ big='Cuentas del hogar'; small='Cuando tu pareja abra esta página, aquí verán quién le debe a quién.'; }
+  if(ids.length<2){ big='Cuentas del hogar'; small='Aquí verán quién le debe a quién.'; }
   else{
     canSettle=true; const d=bal[ids[0]];
     if(Math.abs(d)<1) big='Están a mano';
@@ -631,7 +655,7 @@ function renderRecibos(){
   if(S.status!=='ok'){ m.append(emptyBox('Sin datos compartidos','Inicia sesión para controlar los recibos.')); return; }
   const ids=memberIds(), pm=payMap();
   if(!S.bills.length){
-    m.append(emptyBox('Aún no hay recibos','Agrega el alquiler y los servicios que pagan entre los dos. Cada mes marcan quién pagó y la app calcula quién le debe a quién.',
+    m.append(emptyBox('Aún no hay recibos','Agrega alquiler y servicios; cada mes marca quién pagó.',
       h('div',{class:'chips center'},QUICK_BILLS.map(n=>h('button',{type:'button',class:'chip',onClick:()=>openBillSheet(null,{name:n})},'+ '+n)))));
     return;
   }
@@ -725,7 +749,7 @@ function renderGastos(){
   if(S.status!=='ok'){ m.append(emptyBox('Sin datos compartidos','Inicia sesión para registrar gastos.')); return; }
   m.append(balanceBox());
   if(!S.expenses.length){
-    m.append(emptyBox('Aún no hay gastos','Anota el súper, la farmacia, la gasolina. Indica quién pagó y la app ajusta quién le debe a quién.',
+    m.append(emptyBox('Aún no hay gastos','Anota quién pagó y la app calcula el balance.',
       h('div',{class:'chips center'},QUICK_EXP.map(q=>h('button',{type:'button',class:'chip',onClick:()=>openExpSheet(null,{desc:q[0],cat:q[1]})},'+ '+q[0])))));
     settleHistory(m); return;
   }
@@ -800,7 +824,7 @@ function renderPresupuesto(){
   const m=$('#budMount'); m.replaceChildren();
   const lock=h('p',{class:'privacy'});
   lock.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
-  lock.append(document.createTextNode('Privado: tu pareja no ve esta hoja. Tu parte de recibos y gastos compartidos se suma sola.'));
+  lock.append(document.createTextNode('Privado: solo tú ves esta hoja.'));
   if(S.status==='boot'||(S.status==='ok'&&S.uid&&!(S.ready.cfg&&S.ready.entries))){ m.append(h('p',{class:'summary'},'Cargando tu presupuesto…')); return; }
   if(S.status!=='ok'){ m.append(emptyBox('Sin datos guardados','Inicia sesión para llevar tu presupuesto.')); return; }
   if(!S.uid){ m.append(emptyBox('Inicia sesión','Tu presupuesto es privado y necesita saber quién eres.')); return; }
@@ -837,7 +861,7 @@ function renderPresupuesto(){
   // Movimientos
   m.append(h('h3',{class:'sec'},'Movimientos'));
   if(!mes.length){
-    m.append(emptyBox('Sin movimientos este mes','Anota tus gastos al momento: súper, gasolina, café. Así sabes cuánto te queda.',
+    m.append(emptyBox('Sin movimientos este mes','Anota tus gastos del mes.',
       h('button',{type:'button',class:'btn',onClick:()=>openEntrySheet(null)},'Agregar un gasto')));
     return;
   }
@@ -1034,13 +1058,13 @@ function householdScreen(box,me){
     };
     const code=h('input',{id:'g_code',type:'text',autocomplete:'off',maxlength:'6',placeholder:'ABC123',style:'text-transform:uppercase'});
     const join=h('form',{novalidate:true,onSubmit:ev=>{ev.preventDefault();run({action:'join',code:code.value});}},
-      gField('g_code','Código de tu pareja',code,'Si tu pareja ya creó el hogar, pídele el código de 6 caracteres.'),
+      gField('g_code','Código del hogar',code,'Lo da quien creó el hogar.'),
       h('button',{type:'submit',class:'btn ghost'},'Unirme con código'));
     const out=h('button',{type:'button',class:'btn ghost sm',onClick:async()=>{try{await api('auth',{action:'logout'});}catch(e){} location.reload();}},'Salir');
     box.replaceChildren(gateCard(
       h('p',{class:'summary'},'Hola, '+me.user.name+'. Falta elegir tu hogar.'),
       h('button',{type:'button',class:'btn',onClick:()=>run({action:'create'})},'Crear hogar nuevo'),
-      h('p',{class:'hint'},'Crea el hogar si eres la primera persona. Te damos un código para tu pareja.'),
+      h('p',{class:'hint'},'Crea el hogar y comparte el código.'),
       join,err,out));
   });
 }

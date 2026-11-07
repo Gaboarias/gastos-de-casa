@@ -2,7 +2,7 @@
   "name": "casa-en-orden",
   "version": "3.0.0",
   "private": true,
-  "description": "App del hogar para dos: despensa, recibos, gastos y presupuesto personal privado.",
+  "description": "Casa en Orden: despensa, recibos, gastos y presupuesto privado.",
   "engines": { "node": ">=20" },
   "dependencies": {
     "bcryptjs": "2.4.3",

@@ -3,7 +3,7 @@
 Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v3`, span `.ver` en `index.html`).
 
 ## Objetivo
-App pequeña para una pareja (2 personas): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, y presupuesto personal **privado** por persona. Va en Vercel con MongoDB, login propio con correo y contraseña, para que la pareja no necesite cuenta de claude.ai.
+App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, y presupuesto personal **privado** por persona. Va en Vercel con MongoDB, login propio con correo y contraseña.
 
 ## Estado (2026-11-06: desplegado y verificado)
 - Repo: `github.com/Gaboarias/gastos-de-casa` (rama `main`). Cada push a `main` despliega solo.
