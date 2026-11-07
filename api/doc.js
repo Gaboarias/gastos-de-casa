@@ -52,7 +52,7 @@ module.exports = route(['POST'], async (req) => {
   if (b.op === 'update') {
     const $set = { updatedAt: new Date() };
     for (const k of Object.keys(data)) {
-      if (!FIELD.test(k)) throw fail(400, 'Campo no válido');
+      if (!FIELD.test(k) || k === '__proto__' || k === 'constructor' || k === 'prototype') throw fail(400, 'Campo no válido');
       $set['data.' + k] = data[k];
     }
     const after = await docs.findOneAndUpdate(key, { $set }, { returnDocument: 'after' });
