@@ -1,9 +1,9 @@
-# Casa en Orden (v5) — traspaso a Claude Code
+# Casa en Orden (v6) — traspaso a Claude Code
 
-Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v5`, span `.ver` en `index.html`).
+Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v6`, span `.ver` en `index.html`).
 
 ## Objetivo
-App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, presupuesto personal **privado** por persona y notas compartidas. Va en Vercel con MongoDB, login propio con correo y contraseña.
+App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, presupuesto personal **privado** por persona, notas compartidas y foto/PDF del recibo en cada gasto. Va en Vercel con MongoDB, login propio con correo y contraseña.
 
 ## Estado (2026-11-06: desplegado y verificado)
 - Repo: `github.com/Gaboarias/gastos-de-casa` (rama `main`). Cada push a `main` despliega solo.
@@ -26,6 +26,7 @@ App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compa
   - `household.js`: POST `create | join` (código de 6 chars `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, máx. 2 integrantes, unión atómica, límite de 10 intentos fallidos).
   - `sync.js`: GET devuelve todos los docs del hogar (`h:<hid>`) y privados (`u:<uid>`) más `members` sintetizado.
   - `doc.js`: POST `{op:'set'|'update'|'delete', col, id, data}` con validación.
+  - `file.js`: recibos. POST `{op:'put',mime,b64}` (jpeg/png/webp/pdf, máx. 1,5 MB, se comprueba la cabecera del archivo) → `{id}`; POST `{op:'delete',id}`; GET `?id=` devuelve el archivo (solo integrantes del hogar). Colección `files {_id(hex24),scope,mime,size,data,createdBy,createdAt}`; máx. 1000 por hogar. El cliente reduce las fotos a 1600 px JPEG antes de subir; el gasto guarda `receipt` (id) y `receiptType` (`image|pdf`).
   - `health.js`: ping a la base.
 - `lib/`: `http.js` (`route`, `fail`, `bodyOf`; 405/415, no-store, errores uniformes), `db.js` (conexión cacheada en `global.__casaDb`, índices únicos), `auth.js` (JWT HS256 en cookie `ceo_session` HttpOnly/Secure/SameSite=Lax, 30 días).
 - Modelo en Mongo: `users {email,name,hash,hid,hidAt,joinFails}`, `households {code,members[]}`, `docs {scope,col,id,data,updatedAt}`.
@@ -39,7 +40,7 @@ App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compa
 Correr en **procesos de servidor separados** (el test de API consume `MAX_USERS=4`):
 ```
 PORT=3999 node test/server.js &        # servidor local con Mongo falso
-node test/api-test.js                  # 48 comprobaciones
+node test/api-test.js                  # 57 comprobaciones
 kill %1
 PORT=3999 node test/server.js &
 python3 test/ui-test.py                # Playwright, 2 usuarios
@@ -57,4 +58,4 @@ kill %1
 ## Reglas
 - No imprimir ni guardar en archivos `MONGODB_URI` ni `AUTH_SECRET`.
 - No crear repos ni proyectos de pago sin confirmar con el usuario.
-- Si cambias `index.html`, súbele la versión (v6, v7…).
+- Si cambias `index.html`, súbele la versión (v7, v8…).

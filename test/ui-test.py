@@ -61,6 +61,19 @@ with sync_playwright() as p:
     t=A.inner_text('#expMount'); print('A gastos:',t.replace('\n',' | ')[:200])
     check('Ana te' not in t and ('le debes' in t.lower() and '30 000' in t.replace(' ',' ')),'A le debe 30 000 a Ana')
 
+    # --- Recibo del súper: A adjunta foto al gasto, B lo ve
+    import base64, tempfile, os
+    png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
+    tmp=os.path.join(tempfile.mkdtemp(),'recibo.png'); open(tmp,'wb').write(png)
+    A.click('#expMount >> text=Automercado'); A.wait_for_selector('#f_receipt'); A.set_input_files('#f_receipt',tmp); A.click('#sheetBody button[type=submit]')
+    A.wait_for_selector('#expMount .rcpt', timeout=15000); check(True,'A adjunta el recibo al gasto')
+    A.click('#expMount .rcpt'); A.wait_for_selector('.rcpt-img')
+    check(A.evaluate("(async()=>{const i=document.querySelector('.rcpt-img');await i.decode();return i.naturalWidth})()")==1,'A ve la imagen del recibo')
+    A.click('#sheetX')
+    B.wait_for_selector('#expMount .rcpt', timeout=12000); check(True,'B ve que el gasto tiene recibo')
+    nf=B.evaluate("fetch('/api/sync').then(r=>r.json()).then(j=>j.docs.find(d=>d.col==='expenses').data.receipt)")
+    check(B.evaluate("id=>fetch('/api/file?id='+id).then(r=>r.status)",nf)==200,'B descarga el recibo')
+
     # --- Presupuesto privado
     A.click('[data-tab=presupuesto]'); A.click('#addEntry'); A.fill('#f_amount','7000'); A.fill('#f_desc','secreto-de-A')
     A.click('#sheetBody button[type=submit]'); A.wait_for_selector('#budMount >> text=secreto-de-A')

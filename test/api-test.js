@@ -5,7 +5,7 @@ const ok = (c, msg) => { total++; if (!c) { fails++; console.log('FALLA:', msg);
 
 function client() {
   let cookie = '';
-  return async (path, body, opts = {}) => {
+  const call = async (path, body, opts = {}) => {
     const r = await fetch(B + '/api/' + path, {
       method: body !== undefined || opts.method === 'POST' ? 'POST' : 'GET',
       headers: { ...(opts.noJson ? { 'content-type': 'text/plain' } : body !== undefined ? { 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) },
@@ -16,6 +16,8 @@ function client() {
     let j = null; try { j = await r.json(); } catch (e) {}
     return { s: r.status, j };
   };
+  call.cookieHeader = () => cookie;
+  return call;
 }
 
 (async () => {
@@ -70,10 +72,23 @@ function client() {
   r = await A('sync'); const bud = r.j.docs.find((d) => d.col === '~' && d.id === 'budget'); ok(bud && bud.data.income === 900000, 'A conserva el suyo (no lo pisó B)');
   r = await Bc('doc', { op: 'delete', col: '~budget/entries', id: 'p1' }); r = await A('sync'); ok(r.j.docs.some((d) => d.col === '~budget/entries' && d.id === 'p1'), 'B no puede borrar el movimiento de A');
 
+  // Archivos (recibos)
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const rawGet = async (cl, path) => { const c = cl.cookieHeader(); return fetch(B + '/api/' + path, { headers: c ? { cookie: c } : {} }); };
+  r = await A('file', { op: 'put', mime: 'image/png', b64: PNG }); ok(r.s === 200 && /^[a-f0-9]{24}$/.test(r.j.id || ''), 'A sube un recibo');
+  const fid = r.j.id;
+  let g = await rawGet(Bc, 'file?id=' + fid); ok(g.status === 200 && g.headers.get('content-type') === 'image/png' && (await g.arrayBuffer()).byteLength === 70, 'B descarga el recibo de A');
+  g = await rawGet(anon, 'file?id=' + fid); ok(g.status === 401, 'recibo sin sesión = 401');
+  r = await A('file', { op: 'put', mime: 'image/jpeg', b64: PNG }); ok(r.s === 400, 'tipo que no coincide = 400');
+  r = await A('file', { op: 'put', mime: 'text/html', b64: PNG }); ok(r.s === 400, 'tipo no permitido = 400');
+  r = await A('file', { op: 'put', mime: 'image/png', b64: 'A'.repeat(2100000) }); ok(r.s === 413, 'archivo enorme = 413');
+  g = await rawGet(A, 'file?id=zzz'); ok(g.status === 400, 'id de archivo inválido = 400');
+
   // Otro hogar
   r = await D('auth', { action: 'signup', email: 'vecino@casa.com', password: 'clave-segura-4', name: 'Vecino' }); ok(r.s === 200, 'signup D');
   r = await D('household', { action: 'create' }); ok(r.s === 200 && r.j.household.code !== code, 'D crea otro hogar');
   r = await D('sync'); ok(!r.j.docs.some((d) => d.col === 'inventory' || d.col === 'expenses'), 'otro hogar no ve datos de A y B');
+  g = await rawGet(D, 'file?id=' + fid); ok(g.status === 404, 'otro hogar no ve el recibo');
   r = await E('auth', { action: 'signup', email: 'quinta@casa.com', password: 'clave-segura-5', name: 'Quinta' }); ok(r.s === 403, 'registro cerrado al llegar al máximo');
 
   // Login / logout
@@ -86,6 +101,7 @@ function client() {
 
   // Borrado
   r = await A('doc', { op: 'delete', col: 'inventory', id: 'i1' }); r = await Bc('sync'); ok(!r.j.docs.some((d) => d.id === 'i1'), 'borrado visible para B');
+  r = await Bc('file', { op: 'delete', id: fid }); g = await rawGet(A, 'file?id=' + fid); ok(r.s === 200 && g.status === 404, 'recibo borrado');
 
   console.log(fails ? `${fails} FALLAS de ${total}` : `API OK: ${total} comprobaciones`);
   process.exit(fails ? 1 : 0);

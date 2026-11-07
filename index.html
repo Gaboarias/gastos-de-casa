@@ -108,6 +108,10 @@ textarea{min-height:120px;padding:9px 10px;resize:vertical;line-height:1.45}
 .qty{font:500 16px/1.1 var(--f-mono);font-variant-numeric:tabular-nums}
 .unit{font-size:11px;color:var(--ink-2);max-width:7ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .right{display:grid;justify-items:end;gap:4px;padding:10px 0}
+.rcpt{display:inline-flex;align-items:center;gap:4px;min-height:26px;padding:0 8px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);font:500 11px var(--f-mono);letter-spacing:.04em;text-transform:uppercase;cursor:pointer}
+.rcpt svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.rcpt-img{display:block;width:100%;max-height:70vh;max-height:70dvh;object-fit:contain;border-radius:8px;background:var(--surface-2)}
+input[type="file"]{padding:8px 10px;min-height:0}
 .amt{font:500 15px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .amt.pos{color:var(--good)}
 .pill{display:inline-block;padding:1px 8px;border-radius:999px;font:500 10.5px/1.6 var(--f-mono);letter-spacing:.05em;text-transform:uppercase;background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
@@ -182,7 +186,7 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
 <main id="gate" class="gate" hidden></main>
 <div class="app" id="appRoot" hidden>
   <header class="top">
-    <h1>Casa en Orden<span class="ver">v5</span></h1>
+    <h1>Casa en Orden<span class="ver">v6</span></h1>
     <div class="people" id="people" aria-label="Personas del hogar"></div>
     <button type="button" class="btn ghost sm" id="logout">Salir</button>
   </header>
@@ -397,6 +401,8 @@ function openSheet(cfg){
       c=h('select',{id:'f_'+f.id},f.options.map(o=>h('option',{value:o[0],selected:String(o[0])===String(f.value)?true:null},o[1])));
     }else if(f.type==='textarea'){
       c=h('textarea',{id:'f_'+f.id,placeholder:f.placeholder,maxlength:f.max||5000,rows:6}); c.value=f.value==null?'':f.value;
+    }else if(f.type==='file'){
+      c=h('input',{id:'f_'+f.id,type:'file',accept:f.accept||'image/*,application/pdf'});
     }else{
       c=h('input',{id:'f_'+f.id,type:f.type||'text',value:f.value==null?'':f.value,placeholder:f.placeholder,inputmode:f.type==='number'?'decimal':null,step:f.type==='number'?'any':null,min:f.min,max:f.max,autocomplete:'off'});
     }
@@ -406,8 +412,13 @@ function openSheet(cfg){
   const collect=()=>{
     let ok=true; const vals={};
     for(const f of cfg.fields){
-      const raw=ctl[f.id].value.trim(); let msg='';
       err[f.id].hidden=true;
+      if(f.type==='file'){
+        const file=(ctl[f.id].files&&ctl[f.id].files[0])||null; vals[f.id]=file;
+        if(!file&&f.required){err[f.id].textContent='Campo obligatorio';err[f.id].hidden=false;ok=false;}
+        continue;
+      }
+      const raw=ctl[f.id].value.trim(); let msg='';
       if(raw===''){ if(f.required) msg='Campo obligatorio'; }
       else if(f.type==='number'){
         const n=Number(raw);
@@ -732,6 +743,50 @@ function splitNote(x){
   if(x.split===0) return ownerLabel(ids[1]);
   return x.split+'% / '+(100-x.split)+'%';
 }
+/* ---------- Recibos (fotos/PDF) ---------- */
+const MAX_FILE=1500000;
+const blobB64=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(b);});
+async function loadBitmap(file){
+  try{ return await createImageBitmap(file); }catch(e){}
+  return new Promise((res,rej)=>{const u=URL.createObjectURL(file);const im=new Image();im.onload=()=>{URL.revokeObjectURL(u);res(im);};im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('img'));};im.src=u;});
+}
+async function shrinkImage(file){
+  const im=await loadBitmap(file);
+  const w=im.width||im.naturalWidth, hgt=im.height||im.naturalHeight, k=Math.min(1,1600/Math.max(w,hgt));
+  const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w*k)); c.height=Math.max(1,Math.round(hgt*k));
+  c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+  if(im.close) im.close();
+  for(const q of [0.82,0.7,0.58,0.45]){
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',q));
+    if(blob&&blob.size<=MAX_FILE) return blob;
+  }
+  throw Object.assign(new Error('La foto es demasiado grande.'),{serverMsg:'La foto es demasiado grande.'});
+}
+async function uploadFile(file){
+  let blob, mime;
+  if(file.type==='application/pdf'){ blob=file; mime='application/pdf'; }
+  else{
+    try{ blob=await shrinkImage(file); mime='image/jpeg'; }
+    catch(e){ if(/^image\/(jpeg|png|webp)$/.test(file.type)&&file.size<=MAX_FILE){blob=file;mime=file.type;} else throw Object.assign(new Error('No se pudo leer la foto.'),{serverMsg:'No se pudo leer la foto.'}); }
+  }
+  if(blob.size>MAX_FILE) throw Object.assign(new Error('Archivo demasiado grande (máx. 1,5 MB).'),{serverMsg:'Archivo demasiado grande (máx. 1,5 MB).'});
+  toast('Subiendo recibo…');
+  const r=await api('file',{op:'put',mime,b64:await blobB64(blob)});
+  return {id:r.id,type:mime==='application/pdf'?'pdf':'image'};
+}
+const dropFile=id=>{ if(id) api('file',{op:'delete',id}).catch(()=>{}); };
+const fileUrl=id=>'/api/file?id='+encodeURIComponent(id);
+function openReceipt(x){
+  if(x.receiptType==='pdf'){ window.open(fileUrl(x.receipt),'_blank','noopener'); return; }
+  if($('#overlay').hidden) lastFocus=document.activeElement;
+  $('#sheetTitle').textContent='Recibo · '+(x.desc||expLabel(x.cat));
+  const body=$('#sheetBody'); body.replaceChildren();
+  body.append(h('img',{class:'rcpt-img',src:fileUrl(x.receipt),alt:'Recibo de '+(x.desc||expLabel(x.cat))}),
+    h('div',{class:'actions'},h('a',{class:'btn ghost',href:fileUrl(x.receipt),target:'_blank',rel:'noopener'},'Abrir en pestaña nueva')));
+  $('#overlay').hidden=false;
+}
+const rcptIcon=()=>{const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('aria-hidden','true');s.innerHTML='<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/>';return s;};
+
 function openExpSheet(x,preset){
   if(roBlock()) return;
   const edit=!!x, ids=memberIds(), sp=splitOptions();
@@ -743,15 +798,26 @@ function openExpSheet(x,preset){
   ];
   if(sp) fields.push({id:'split',label:'¿De quién es el gasto?',type:'select',options:sp,value:String(edit&&typeof x.split==='number'?x.split:50)});
   fields.push({id:'date',label:'Fecha',type:'date',required:true,value:edit?x.date:todayStr()});
+  const hasR=edit&&!!x.receipt;
+  fields.push({id:'receipt',label:'Recibo',type:'file',hint:hasR?'Ya hay un recibo. Si eliges otro, lo reemplaza.':'Opcional: foto o PDF.'});
+  const extra=[];
+  if(hasR){
+    extra.push({label:'Ver recibo',noClose:true,onClick:async()=>openReceipt(x)});
+    extra.push({label:'Quitar recibo',confirm:'Confirmar: quitar',onClick:()=>guard(async()=>{await S.db.doc('expenses/'+x.id).update({receipt:null,receiptType:null,updatedAt:iso()});dropFile(x.receipt);})});
+  }
+  if(edit) extra.push({label:'Eliminar gasto',confirm:'Confirmar: eliminar',onClick:()=>guard(async()=>{await S.db.doc('expenses/'+x.id).delete();dropFile(x.receipt);})});
   openSheet({
     title:edit?'Editar gasto':'Nuevo gasto', submitLabel:edit?'Guardar':'Agregar', fields,
     onSubmit:v=>guard(async()=>{
       const col=S.db.collection('expenses'), ref=edit?col.doc(x.id):col.doc();
       const split=(v.split!=null&&v.split!=='')?Number(v.split):(edit&&typeof x.split==='number'?x.split:50);
-      await ref.set({amount:v.amount,cat:v.cat,desc:v.desc||'',paidBy:v.paidBy||S.uid||null,split,date:v.date,month:v.date.slice(0,7),
+      let receipt=hasR?x.receipt:null, receiptType=hasR?(x.receiptType||'image'):null;
+      if(v.receipt){ const up=await uploadFile(v.receipt); receipt=up.id; receiptType=up.type; }
+      await ref.set({amount:v.amount,cat:v.cat,desc:v.desc||'',paidBy:v.paidBy||S.uid||null,split,date:v.date,month:v.date.slice(0,7),receipt,receiptType,
         createdBy:edit&&x.createdBy?x.createdBy:(S.uid||null),updatedAt:iso()});
+      if(v.receipt){ toast('Gasto guardado con recibo.'); if(hasR) dropFile(x.receipt); }
     }),
-    extra:edit?[{label:'Eliminar gasto',confirm:'Confirmar: eliminar',onClick:()=>guard(async()=>{await S.db.doc('expenses/'+x.id).delete();})}]:[]
+    extra
   });
 }
 function renderGastos(){
@@ -789,7 +855,8 @@ function renderGastos(){
     list.append(h('div',{class:'row'},
       h('button',{type:'button',class:'row-main',onClick:()=>openExpSheet(x),'aria-label':'Editar '+(x.desc||expLabel(x.cat))},
         h('div',{class:'nm'},x.desc||expLabel(x.cat)),h('div',{class:'meta'},bits)),
-      h('div',{class:'right'},h('div',{class:'amt'},money(x.amount)))));
+      h('div',{class:'right'},h('div',{class:'amt'},money(x.amount)),
+        x.receipt?h('button',{type:'button',class:'rcpt','aria-label':'Ver recibo de '+(x.desc||expLabel(x.cat)),onClick:()=>openReceipt(x)},rcptIcon(),'Recibo'):null)));
   }
   m.append(h('h3',{class:'sec'},'Gastos'),list);
   settleHistory(m);
