@@ -5,20 +5,19 @@ Responde en español, directo y conciso. Cada cambio al HTML sube el número de 
 ## Objetivo
 App pequeña para una pareja (2 personas): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, y presupuesto personal **privado** por persona. Va en Vercel con MongoDB, login propio con correo y contraseña, para que la pareja no necesite cuenta de claude.ai.
 
-## Estado
-- Código completo y probado en local contra un MongoDB falso (46 comprobaciones de API + prueba E2E con 2 usuarios en Playwright, sin errores JS).
-- **Falta**: desplegar en Vercel, conectar MongoDB Atlas real, definir variables de entorno y verificar en producción. El conector de Vercel de la sesión anterior daba 403 al crear proyecto/despliegue; GitHub CLI no tenía token válido. Aquí sí hay terminal del usuario: usar `npx vercel`.
-- Nunca se probó contra Atlas real ni en Vercel.
+## Estado (2026-11-06: desplegado y verificado)
+- Repo: `github.com/Gaboarias/gastos-de-casa` (rama `main`). Cada push a `main` despliega solo.
+- Vercel: proyecto `gastos-de-casa` en el equipo `garias1989-2231s-projects`. Producción: **https://gastos-de-casa-black.vercel.app** (`/api/health` → `{"ok":true,"secret":true}`).
+- MongoDB: instalado desde el Marketplace de Vercel (`npx vercel integration add mongodbatlas`), recurso `atlas-champagne-fence`; la integración pone `MONGODB_URI` sola. No hay cuenta de Atlas aparte.
+- Variables en Vercel (Production y Preview): `MONGODB_URI` (integración), `AUTH_SECRET` (sensible), `MAX_USERS=2`.
+- Verificado en producción con 2 cuentas de prueba (18 comprobaciones: hogar + código, despensa y gasto sincronizados, presupuesto privado invisible para el otro, tercera cuenta rechazada). Las cuentas de prueba ya se borraron; la base está vacía.
+- Las URLs de despliegue `*-garias1989-2231s-projects.vercel.app` piden login de Vercel; el dominio de producción no.
 
-## Tareas para ti (en orden)
-1. `npm install` y correr las pruebas locales (ver "Pruebas") para confirmar que todo sigue verde.
-2. Desplegar: `npx vercel --prod` (framework **Other**, sin build command, output vacío). Si el usuario prefiere, repo en GitHub + importar en Vercel.
-3. Pedirle al usuario que cree un clúster **MongoDB Atlas M0**, un usuario de base de datos y `0.0.0.0/0` en Network Access (o instalar Atlas desde Vercel Marketplace). La cadena `MONGODB_URI` la pone el usuario en Vercel; **no pedirla ni imprimirla en el chat**.
-4. Variables de entorno (Production): `MONGODB_URI`, `AUTH_SECRET` (≥32 chars, generar con `openssl rand -hex 32` y guardarlo solo en Vercel), opcional `MAX_USERS` (def. 4), `MONGODB_DB` (def. `casaenorden`). Redeploy.
-5. Verificar `GET /api/health` → `{"ok":true,"secret":true}`. Si falla: 503 "Falta conectar la base de datos" = falta `MONGODB_URI`; 503 "No se pudo conectar a MongoDB" = usuario/clave/Network Access.
-6. Si el proyecto tiene Deployment Protection activa, desactivarla para que la pareja entre sin login de Vercel.
-7. Prueba de humo real: crear 2 cuentas, hogar + código, sincronizar despensa, gasto y balance, comprobar que el presupuesto no es visible para el otro. Borrar esas cuentas de prueba después (colección `users`, `households`, `docs`) o avisar al usuario.
-8. Revisar `get_runtime_errors` / logs si algo falla.
+## Cómo operar
+- El conector MCP de Vercel de esta cuenta devuelve 403 al crear proyectos/integraciones: usar el CLI, `npx vercel <cmd> --scope garias1989-2231s-projects` (login por dispositivo con `npx vercel login`).
+- Para subir una cuenta más: `npx vercel env rm MAX_USERS production` y volver a añadirla con el nuevo valor, luego redeploy. Para liberar un cupo borra el usuario en la colección `users` (y su hogar/docs si aplica).
+- Si `/api/health` falla: 503 "Falta conectar la base de datos" = falta `MONGODB_URI`; 503 "No se pudo conectar a MongoDB" = revisar la integración en el panel de Vercel (Storage).
+- Logs: `npx vercel logs <url>` o `get_runtime_errors`.
 
 ## Arquitectura
 - `index.html`: SPA estática sin build (JS/CSS inline, ~64 KB). Pestañas Despensa / Recibos / Gastos / Presupuesto. Generada desde un artifact de claude.ai; el código del cliente que habla con la API está en `client-block.js`.

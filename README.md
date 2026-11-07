@@ -29,7 +29,7 @@ crea el clúster y define `MONGODB_URI` solo.)
 
 Después de guardar las variables, haz un nuevo despliegue (Redeploy) para que se apliquen.
 
-## 4. Comprobar
+## 4. Comprobar (producción actual: https://gastos-de-casa-black.vercel.app)
 Abre `https://TU-PROYECTO.vercel.app/api/health`. Debe responder `{"ok":true,"secret":true}`.
 Si dice "Falta conectar la base de datos", revisa `MONGODB_URI`; si dice "No se pudo conectar a MongoDB",
 revisa el usuario, la contraseña y *Network Access*.
