@@ -3,7 +3,7 @@ const { route, fail, bodyOf } = require('../lib/http');
 const { getDb } = require('../lib/db');
 const A = require('../lib/auth');
 
-const SHARED = /^(inventory|bills|payments|expenses|settlements)$/;
+const SHARED = /^(inventory|bills|payments|expenses|settlements|notes)$/;
 const PRIVATE = /^~(budget\/entries)?$/; // "~" = documento del presupuesto; "~budget/entries" = movimientos
 const ID = /^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 const FIELD = /^[A-Za-z0-9_]{1,40}$/;

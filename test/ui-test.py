@@ -68,6 +68,15 @@ with sync_playwright() as p:
     check('secreto-de-A' not in B.inner_text('#budMount'),'B no ve movimientos de A')
     check('Gastos compartidos (tu parte)' in A.inner_text('#budMount') and '30' in A.inner_text('#budMount'),'A descuenta su parte de gastos compartidos')
 
+    # --- Notas compartidas
+    A.click('[data-tab=notas]'); A.click('#addNote'); A.fill('#f_title','Pendientes'); A.fill('#f_text','Llamar al fontanero\nComprar bombillos')
+    A.click('#sheetBody button[type=submit]'); A.wait_for_selector('#noteMount >> text=Pendientes')
+    check('Llamar al fontanero' in A.inner_text('#noteMount'),'A ve su nota')
+    B.click('[data-tab=notas]'); B.wait_for_selector('#noteMount >> text=Pendientes', timeout=12000)
+    check('Gabo' in B.inner_text('#noteMount'),'B ve la nota de A con su nombre')
+    B.click('#noteMount >> text=Pendientes'); B.wait_for_selector('#f_text'); B.fill('#f_text','Ya llamé'); B.click('#sheetBody button[type=submit]')
+    A.wait_for_selector('#noteMount >> text=Ya llamé', timeout=12000); check(True,'A ve la edición de B')
+
     # --- Persistencia: recargar A mantiene sesión y datos
     A.reload(); A.wait_for_selector('#appRoot:not([hidden])'); A.click('[data-tab=presupuesto]'); A.wait_for_selector('#budMount >> text=secreto-de-A')
     check(True,'A recarga y conserva sesión y datos')

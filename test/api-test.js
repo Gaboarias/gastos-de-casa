@@ -49,6 +49,8 @@ function client() {
   r = await A('sync'); ok(r.j.docs.find((d) => d.id === 'i1').data.qty === 1, 'A ve el cambio de B');
   r = await A('doc', { op: 'update', col: 'inventory', id: 'noexiste', data: { qty: 1 } }); ok(r.s === 404, 'update de algo inexistente = 404');
   r = await A('doc', { op: 'set', col: 'expenses', id: 'e1', data: { amount: 45000, paidBy: 'x' } }); ok(r.s === 200, 'gasto compartido');
+  r = await A('doc', { op: 'set', col: 'notes', id: 'n1', data: { title: 'Pendientes', text: 'Llamar al fontanero' } }); ok(r.s === 200, 'nota compartida');
+  r = await Bc('sync'); ok(r.j.docs.some((d) => d.col === 'notes' && d.id === 'n1' && d.data.text === 'Llamar al fontanero'), 'B ve la nota de A');
 
   // Integrantes
   r = await A('sync'); const mem = r.j.docs.filter((d) => d.col === 'members'); ok(mem.length === 2 && mem.some((m) => m.data.name === 'Ana'), 'lista de integrantes con nombres');

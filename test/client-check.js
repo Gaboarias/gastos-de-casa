@@ -10,7 +10,7 @@ const UNITS=['unid.','kg','g','L','mL','paquetes','rollos','botellas','latas'];
 const QUICK_BILLS=['Alquiler','Electricidad','Agua','Internet','Teléfono'];
 const EXP_CATS=[['super','Supermercado'],['feria','Feria y verduras'],['hogar','Limpieza y hogar'],['salud','Farmacia y salud'],['transporte','Transporte'],['salidas','Restaurantes y salidas'],['otros','Otros']];
 const QUICK_EXP=[['Supermercado','super'],['Feria','feria'],['Farmacia','salud'],['Gasolina','transporte'],['Restaurante','salidas']];
-const TABS=['despensa','recibos','gastos','presupuesto'];
+const TABS=['despensa','recibos','gastos','presupuesto','notas'];
 // Lista base de la casa (lista-despensa-casa-en-orden.md): se carga con un botón cuando la despensa está vacía.
 const BASE_FOOD=['Lechugas','Patilla','Salmas','Galletas de soya','Yogur natural sin sabor','Limones','Uvas verdes','Manzanas verdes','Arroz','Arroz basmati','Garbanzos naturales','Lentejas','Pasta spaghetti de arroz','Petit pois','Ciruelas','Sardinas','Atún en trozos','Calamares','Risotto','Salsa de tomate Sacla','Fresco en polvo','Gelatina light','Harina de arroz','Mezcla para pancake gluten free','Masa para tortillas','Maizena / Vitamaíz','Salsa Worcestershire','Aderezo','Leche condensada','Leche deslactosada','Huevos','Queso crema','Jaleas','Quesos','Jamón','Salsa de soya sin gluten','Cacao sin azúcar en polvo','Mantequilla','Pasta de tomate','Salchichas','Papa','Yuca','Camote','Tomate','Chile dulce','Zanahoria','Rábano','Cebolla morada','Pepinos','Espinaca','Peras','Melocotones','Naranjas / mandarinas','Té','Sorbetos sin gluten','Galletas de arroz'];
 const BASE_CLEAN=['Papel higiénico','Toalla de cocina','Servilletas','Jabón de manos','Jabón lavaplatos','Cloro','Desinfectante','Vinagre blanco','Esponjas lavaplatos'];
@@ -52,7 +52,7 @@ const h=(tag,props,...kids)=>{
 };
 
 /* ---------- Estado ---------- */
-const S={status:'boot',db:null,user:null,uid:null,canWrite:null,profiles:{},members:[],inventory:[],bills:[],payments:[],settlements:[],
+const S={status:'boot',db:null,user:null,uid:null,canWrite:null,profiles:{},members:[],inventory:[],bills:[],payments:[],settlements:[],notes:[],
   cfg:{income:0,limits:{}},entries:[],expenses:[],ready:{},failed:null,synced:false,tab:'despensa',month:curYM(),bmonth:curYM(),xmonth:curYM(),invCat:'todo',q:'',histOpen:false};
 const pending=new Map();
 
@@ -146,6 +146,8 @@ function openSheet(cfg){
     let c;
     if(f.type==='select'){
       c=h('select',{id:'f_'+f.id},f.options.map(o=>h('option',{value:o[0],selected:String(o[0])===String(f.value)?true:null},o[1])));
+    }else if(f.type==='textarea'){
+      c=h('textarea',{id:'f_'+f.id,placeholder:f.placeholder,maxlength:f.max||5000,rows:6}); c.value=f.value==null?'':f.value;
     }else{
       c=h('input',{id:'f_'+f.id,type:f.type||'text',value:f.value==null?'':f.value,placeholder:f.placeholder,inputmode:f.type==='number'?'decimal':null,step:f.type==='number'?'any':null,min:f.min,max:f.max,autocomplete:'off'});
     }
@@ -637,6 +639,43 @@ function renderPresupuesto(){
 }
 $('#addEntry').addEventListener('click',()=>openEntrySheet(null));
 
+/* ---------- Notas (compartidas) ---------- */
+function openNoteSheet(n){
+  if(roBlock()) return;
+  const edit=!!n;
+  openSheet({
+    title:edit?'Editar nota':'Nueva nota', submitLabel:edit?'Guardar':'Agregar',
+    fields:[
+      {id:'title',label:'Título',value:edit?n.title:'',placeholder:'Pendientes, ideas, teléfonos…'},
+      {id:'text',label:'Nota',type:'textarea',required:true,value:edit?n.text:'',placeholder:'Escribe aquí.'}
+    ],
+    onSubmit:v=>guard(async()=>{
+      const col=S.db.collection('notes'), ref=edit?col.doc(n.id):col.doc();
+      await ref.set({title:v.title||'',text:v.text,createdBy:edit&&n.createdBy?n.createdBy:(S.uid||null),createdAt:edit&&n.createdAt?n.createdAt:iso(),updatedBy:S.uid||null,updatedAt:iso()});
+    }),
+    extra:edit?[{label:'Eliminar nota',confirm:'Confirmar: eliminar',onClick:()=>guard(async()=>{await S.db.doc('notes/'+n.id).delete();})}]:[]
+  });
+}
+function renderNotas(){
+  const m=$('#noteMount'); m.replaceChildren();
+  if(S.status==='boot'||(S.status==='ok'&&!S.ready.notes)){ m.append(h('p',{class:'summary'},'Cargando notas…')); return; }
+  if(S.status!=='ok'){ m.append(emptyBox('Sin datos compartidos','Inicia sesión para ver las notas.')); return; }
+  if(!S.notes.length){ m.append(emptyBox('Aún no hay notas','Las ven las dos personas del hogar.',h('button',{type:'button',class:'btn',onClick:()=>openNoteSheet(null)},'Escribir la primera nota'))); return; }
+  const list=h('div',{class:'list'});
+  for(const n of [...S.notes].sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||''))||a.id.localeCompare(b.id))){
+    const who=n.updatedBy?(n.updatedBy===S.uid?'Tú':nm(n.updatedBy)):null;
+    const when=n.updatedAt?shortDate(String(n.updatedAt).slice(0,10)):null;
+    const title=(n.title||'').trim();
+    list.append(h('div',{class:'row'},
+      h('button',{type:'button',class:'row-main',onClick:()=>openNoteSheet(n),'aria-label':'Editar '+(title||first(n.text)||'nota')},
+        title?h('div',{class:'nm'},title):null,
+        h('div',{class:'note-txt'+(title?'':' plain')},n.text||''),
+        h('div',{class:'meta'},[when,who].filter(Boolean).map(t=>h('span',null,t))))));
+  }
+  m.append(list);
+}
+$('#addNote').addEventListener('click',()=>openNoteSheet(null));
+
 /* ---------- Encabezado y avisos ---------- */
 function renderHeader(){
   const box=$('#people'); box.replaceChildren();
@@ -648,14 +687,14 @@ function renderHeader(){
   $('#inviteNote').hidden=!(S.status==='ok'&&memberIds().length<2&&S.canWrite!==false);
   $('#roNote').hidden=!(S.status==='ok'&&S.canWrite===false);
   const off=S.status!=='ok'||S.canWrite===false;
-  $('#addItem').disabled=off; $('#addBill').disabled=off; $('#addExp').disabled=off; $('#addEntry').disabled=off||!S.uid;
+  $('#addItem').disabled=off; $('#addBill').disabled=off; $('#addExp').disabled=off; $('#addNote').disabled=off; $('#addEntry').disabled=off||!S.uid;
   const net=$('#net');
   if(S.failed){ net.hidden=false; net.textContent=S.failed==='revoked'?'Tu acceso a los datos cambió. Recarga la página.':'No se pudo leer la base compartida. Lo que ves puede estar desactualizado.'; }
   else if(S.status==='ok'&&!S.synced&&S.netLate){ net.hidden=false; net.textContent='Aún no se alcanza la base compartida. Lo que ves puede estar desactualizado.'; }
   else net.hidden=true;
 }
 let raf=0;
-function renderAll(){renderHeader();renderDespensa();renderRecibos();renderGastos();renderPresupuesto();}
+function renderAll(){renderHeader();renderDespensa();renderRecibos();renderGastos();renderPresupuesto();renderNotas();}
 function queueRender(){ if(raf) return; raf=requestAnimationFrame(()=>{raf=0;renderAll();}); }
 
 /* ---------- Navegación ---------- */
@@ -882,6 +921,7 @@ async function init(){
   listen('expenses',db.collection('expenses'),snap=>{S.expenses=docs(snap);});
   listen('payments',db.collection('payments'),snap=>{S.payments=docs(snap);});
   listen('settlements',db.collection('settlements'),snap=>{S.settlements=docs(snap);});
+  listen('notes',db.collection('notes'),snap=>{S.notes=docs(snap);});
   if(S.uid){
     listen('cfg',budRef(),snap=>{
       const d=snap.exists?snap.data():{};

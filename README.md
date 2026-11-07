@@ -1,6 +1,6 @@
 # Casa en Orden (v3, Vercel + MongoDB)
 
-Despensa, recibos, gastos compartidos y presupuesto privado. Un hogar admite 2 cuentas.
+Despensa, recibos, gastos compartidos, notas y presupuesto privado. Un hogar admite 2 cuentas.
 Login propio con correo y contraseña. Cada persona crea su cuenta; la primera crea el hogar y
 la segunda entra con un código de 6 caracteres. El presupuesto de cada quien solo lo ve esa persona.
 

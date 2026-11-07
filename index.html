@@ -86,8 +86,11 @@ h3.sec{font:500 12px var(--f-mono);text-transform:uppercase;letter-spacing:.09em
 .stack>h3.sec{margin:8px 0 -4px}
 .chip{min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:14px}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
-input,select{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;min-height:42px;padding:0 10px;width:100%}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;min-height:42px;padding:0 10px;width:100%}
 input[type="search"]{background:var(--surface)}
+textarea{min-height:120px;padding:9px 10px;resize:vertical;line-height:1.45}
+.note-txt.plain{margin-top:0;color:var(--ink);font-size:14.5px}
+.note-txt{margin-top:4px;color:var(--ink-2);font-size:13.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
 .tools{display:grid;gap:10px;margin:16px 0 12px}
 
 /* Listas */
@@ -149,7 +152,7 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
 /* Navegación inferior */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);
   padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
-.nav-in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.nav-in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
 .nav button{background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:58px;padding:8px 4px;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-weight:500}
 .nav button[aria-current="page"]{color:var(--accent);font-weight:600}
 .nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
@@ -179,7 +182,7 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
 <main id="gate" class="gate" hidden></main>
 <div class="app" id="appRoot" hidden>
   <header class="top">
-    <h1>Casa en Orden<span class="ver">v4</span></h1>
+    <h1>Casa en Orden<span class="ver">v5</span></h1>
     <div class="people" id="people" aria-label="Personas del hogar"></div>
     <button type="button" class="btn ghost sm" id="logout">Salir</button>
   </header>
@@ -219,6 +222,11 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
     <div class="panel-head"><h2 id="h-bud">Mi presupuesto</h2><button type="button" class="btn" id="addEntry">+ Movimiento</button></div>
     <div id="budMount" class="stack"></div>
   </section>
+
+  <section data-panel="notas" aria-labelledby="h-not" hidden>
+    <div class="panel-head"><h2 id="h-not">Notas</h2><button type="button" class="btn" id="addNote">+ Nota</button></div>
+    <div id="noteMount" class="stack"></div>
+  </section>
 </div>
 
 <nav class="nav" id="navRoot" aria-label="Secciones" hidden>
@@ -227,6 +235,7 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
     <button type="button" data-tab="recibos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg>Recibos</button>
     <button type="button" data-tab="gastos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11h10.2l2-8H6.2"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/></svg>Gastos</button>
     <button type="button" data-tab="presupuesto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/><path d="M4 7l11-3v3"/><circle cx="16" cy="13.5" r="1"/></svg>Presupuesto</button>
+    <button type="button" data-tab="notas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l4 4v12H5V4z"/><path d="M15 4v5h5M8 12h8M8 16h5"/></svg>Notas</button>
   </div>
 </nav>
 
@@ -250,7 +259,7 @@ const UNITS=['unid.','kg','g','L','mL','paquetes','rollos','botellas','latas'];
 const QUICK_BILLS=['Alquiler','Electricidad','Agua','Internet','Teléfono'];
 const EXP_CATS=[['super','Supermercado'],['feria','Feria y verduras'],['hogar','Limpieza y hogar'],['salud','Farmacia y salud'],['transporte','Transporte'],['salidas','Restaurantes y salidas'],['otros','Otros']];
 const QUICK_EXP=[['Supermercado','super'],['Feria','feria'],['Farmacia','salud'],['Gasolina','transporte'],['Restaurante','salidas']];
-const TABS=['despensa','recibos','gastos','presupuesto'];
+const TABS=['despensa','recibos','gastos','presupuesto','notas'];
 // Lista base de la casa (lista-despensa-casa-en-orden.md): se carga con un botón cuando la despensa está vacía.
 const BASE_FOOD=['Lechugas','Patilla','Salmas','Galletas de soya','Yogur natural sin sabor','Limones','Uvas verdes','Manzanas verdes','Arroz','Arroz basmati','Garbanzos naturales','Lentejas','Pasta spaghetti de arroz','Petit pois','Ciruelas','Sardinas','Atún en trozos','Calamares','Risotto','Salsa de tomate Sacla','Fresco en polvo','Gelatina light','Harina de arroz','Mezcla para pancake gluten free','Masa para tortillas','Maizena / Vitamaíz','Salsa Worcestershire','Aderezo','Leche condensada','Leche deslactosada','Huevos','Queso crema','Jaleas','Quesos','Jamón','Salsa de soya sin gluten','Cacao sin azúcar en polvo','Mantequilla','Pasta de tomate','Salchichas','Papa','Yuca','Camote','Tomate','Chile dulce','Zanahoria','Rábano','Cebolla morada','Pepinos','Espinaca','Peras','Melocotones','Naranjas / mandarinas','Té','Sorbetos sin gluten','Galletas de arroz'];
 const BASE_CLEAN=['Papel higiénico','Toalla de cocina','Servilletas','Jabón de manos','Jabón lavaplatos','Cloro','Desinfectante','Vinagre blanco','Esponjas lavaplatos'];
@@ -292,7 +301,7 @@ const h=(tag,props,...kids)=>{
 };
 
 /* ---------- Estado ---------- */
-const S={status:'boot',db:null,user:null,uid:null,canWrite:null,profiles:{},members:[],inventory:[],bills:[],payments:[],settlements:[],
+const S={status:'boot',db:null,user:null,uid:null,canWrite:null,profiles:{},members:[],inventory:[],bills:[],payments:[],settlements:[],notes:[],
   cfg:{income:0,limits:{}},entries:[],expenses:[],ready:{},failed:null,synced:false,tab:'despensa',month:curYM(),bmonth:curYM(),xmonth:curYM(),invCat:'todo',q:'',histOpen:false};
 const pending=new Map();
 
@@ -386,6 +395,8 @@ function openSheet(cfg){
     let c;
     if(f.type==='select'){
       c=h('select',{id:'f_'+f.id},f.options.map(o=>h('option',{value:o[0],selected:String(o[0])===String(f.value)?true:null},o[1])));
+    }else if(f.type==='textarea'){
+      c=h('textarea',{id:'f_'+f.id,placeholder:f.placeholder,maxlength:f.max||5000,rows:6}); c.value=f.value==null?'':f.value;
     }else{
       c=h('input',{id:'f_'+f.id,type:f.type||'text',value:f.value==null?'':f.value,placeholder:f.placeholder,inputmode:f.type==='number'?'decimal':null,step:f.type==='number'?'any':null,min:f.min,max:f.max,autocomplete:'off'});
     }
@@ -877,6 +888,43 @@ function renderPresupuesto(){
 }
 $('#addEntry').addEventListener('click',()=>openEntrySheet(null));
 
+/* ---------- Notas (compartidas) ---------- */
+function openNoteSheet(n){
+  if(roBlock()) return;
+  const edit=!!n;
+  openSheet({
+    title:edit?'Editar nota':'Nueva nota', submitLabel:edit?'Guardar':'Agregar',
+    fields:[
+      {id:'title',label:'Título',value:edit?n.title:'',placeholder:'Pendientes, ideas, teléfonos…'},
+      {id:'text',label:'Nota',type:'textarea',required:true,value:edit?n.text:'',placeholder:'Escribe aquí.'}
+    ],
+    onSubmit:v=>guard(async()=>{
+      const col=S.db.collection('notes'), ref=edit?col.doc(n.id):col.doc();
+      await ref.set({title:v.title||'',text:v.text,createdBy:edit&&n.createdBy?n.createdBy:(S.uid||null),createdAt:edit&&n.createdAt?n.createdAt:iso(),updatedBy:S.uid||null,updatedAt:iso()});
+    }),
+    extra:edit?[{label:'Eliminar nota',confirm:'Confirmar: eliminar',onClick:()=>guard(async()=>{await S.db.doc('notes/'+n.id).delete();})}]:[]
+  });
+}
+function renderNotas(){
+  const m=$('#noteMount'); m.replaceChildren();
+  if(S.status==='boot'||(S.status==='ok'&&!S.ready.notes)){ m.append(h('p',{class:'summary'},'Cargando notas…')); return; }
+  if(S.status!=='ok'){ m.append(emptyBox('Sin datos compartidos','Inicia sesión para ver las notas.')); return; }
+  if(!S.notes.length){ m.append(emptyBox('Aún no hay notas','Las ven las dos personas del hogar.',h('button',{type:'button',class:'btn',onClick:()=>openNoteSheet(null)},'Escribir la primera nota'))); return; }
+  const list=h('div',{class:'list'});
+  for(const n of [...S.notes].sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||''))||a.id.localeCompare(b.id))){
+    const who=n.updatedBy?(n.updatedBy===S.uid?'Tú':nm(n.updatedBy)):null;
+    const when=n.updatedAt?shortDate(String(n.updatedAt).slice(0,10)):null;
+    const title=(n.title||'').trim();
+    list.append(h('div',{class:'row'},
+      h('button',{type:'button',class:'row-main',onClick:()=>openNoteSheet(n),'aria-label':'Editar '+(title||first(n.text)||'nota')},
+        title?h('div',{class:'nm'},title):null,
+        h('div',{class:'note-txt'+(title?'':' plain')},n.text||''),
+        h('div',{class:'meta'},[when,who].filter(Boolean).map(t=>h('span',null,t))))));
+  }
+  m.append(list);
+}
+$('#addNote').addEventListener('click',()=>openNoteSheet(null));
+
 /* ---------- Encabezado y avisos ---------- */
 function renderHeader(){
   const box=$('#people'); box.replaceChildren();
@@ -888,14 +936,14 @@ function renderHeader(){
   $('#inviteNote').hidden=!(S.status==='ok'&&memberIds().length<2&&S.canWrite!==false);
   $('#roNote').hidden=!(S.status==='ok'&&S.canWrite===false);
   const off=S.status!=='ok'||S.canWrite===false;
-  $('#addItem').disabled=off; $('#addBill').disabled=off; $('#addExp').disabled=off; $('#addEntry').disabled=off||!S.uid;
+  $('#addItem').disabled=off; $('#addBill').disabled=off; $('#addExp').disabled=off; $('#addNote').disabled=off; $('#addEntry').disabled=off||!S.uid;
   const net=$('#net');
   if(S.failed){ net.hidden=false; net.textContent=S.failed==='revoked'?'Tu acceso a los datos cambió. Recarga la página.':'No se pudo leer la base compartida. Lo que ves puede estar desactualizado.'; }
   else if(S.status==='ok'&&!S.synced&&S.netLate){ net.hidden=false; net.textContent='Aún no se alcanza la base compartida. Lo que ves puede estar desactualizado.'; }
   else net.hidden=true;
 }
 let raf=0;
-function renderAll(){renderHeader();renderDespensa();renderRecibos();renderGastos();renderPresupuesto();}
+function renderAll(){renderHeader();renderDespensa();renderRecibos();renderGastos();renderPresupuesto();renderNotas();}
 function queueRender(){ if(raf) return; raf=requestAnimationFrame(()=>{raf=0;renderAll();}); }
 
 /* ---------- Navegación ---------- */
@@ -1122,6 +1170,7 @@ async function init(){
   listen('expenses',db.collection('expenses'),snap=>{S.expenses=docs(snap);});
   listen('payments',db.collection('payments'),snap=>{S.payments=docs(snap);});
   listen('settlements',db.collection('settlements'),snap=>{S.settlements=docs(snap);});
+  listen('notes',db.collection('notes'),snap=>{S.notes=docs(snap);});
   if(S.uid){
     listen('cfg',budRef(),snap=>{
       const d=snap.exists?snap.data():{};

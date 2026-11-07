@@ -1,9 +1,9 @@
-# Casa en Orden (v3) — traspaso a Claude Code
+# Casa en Orden (v5) — traspaso a Claude Code
 
-Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v3`, span `.ver` en `index.html`).
+Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v5`, span `.ver` en `index.html`).
 
 ## Objetivo
-App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, y presupuesto personal **privado** por persona. Va en Vercel con MongoDB, login propio con correo y contraseña.
+App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, presupuesto personal **privado** por persona y notas compartidas. Va en Vercel con MongoDB, login propio con correo y contraseña.
 
 ## Estado (2026-11-06: desplegado y verificado)
 - Repo: `github.com/Gaboarias/gastos-de-casa` (rama `main`). Cada push a `main` despliega solo.
@@ -20,7 +20,7 @@ App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compa
 - Logs: `npx vercel logs <url>` o `get_runtime_errors`.
 
 ## Arquitectura
-- `index.html`: SPA estática sin build (JS/CSS inline, ~64 KB). Pestañas Despensa / Recibos / Gastos / Presupuesto. Generada desde un artifact de claude.ai; el código del cliente que habla con la API está en `client-block.js`.
+- `index.html`: SPA estática sin build (JS/CSS inline, ~64 KB). Pestañas Despensa / Recibos / Gastos / Presupuesto / Notas. Generada desde un artifact de claude.ai; el código del cliente que habla con la API está en `client-block.js`.
 - `api/*.js`: funciones serverless Node (CommonJS), `mongodb@6.10.0`, `bcryptjs@2.4.3`, `jose@5.9.6`, node ≥20.
   - `auth.js`: GET sesión (200 con `{user:null,household:null}` si no hay), POST `signup | login | logout`.
   - `household.js`: POST `create | join` (código de 6 chars `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, máx. 2 integrantes, unión atómica, límite de 10 intentos fallidos).
@@ -29,7 +29,7 @@ App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compa
   - `health.js`: ping a la base.
 - `lib/`: `http.js` (`route`, `fail`, `bodyOf`; 405/415, no-store, errores uniformes), `db.js` (conexión cacheada en `global.__casaDb`, índices únicos), `auth.js` (JWT HS256 en cookie `ceo_session` HttpOnly/Secure/SameSite=Lax, 30 días).
 - Modelo en Mongo: `users {email,name,hash,hid,hidAt,joinFails}`, `households {code,members[]}`, `docs {scope,col,id,data,updatedAt}`.
-  - scope `h:<hogar>` = compartido; colecciones permitidas: `inventory, bills, payments, expenses, settlements`.
+  - scope `h:<hogar>` = compartido; colecciones permitidas: `inventory, bills, payments, expenses, settlements, notes`.
   - scope `u:<usuario>` = privado; el cliente usa prefijo `~`: `~` (solo id `budget`) y `~budget/entries`.
   - Doc máx. 20 000 caracteres; campos de `update` con regex `^[A-Za-z0-9_]{1,40}$`.
 - Cliente: `makeBackend(me)` imita `db.doc/collection/onSnapshot` sobre `/api/sync`; sondeo cada 6 s si la pestaña está visible, más al volver a la pestaña y tras cada escritura. Contador `seq` para descartar lecturas viejas.
@@ -39,7 +39,7 @@ App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compa
 Correr en **procesos de servidor separados** (el test de API consume `MAX_USERS=4`):
 ```
 PORT=3999 node test/server.js &        # servidor local con Mongo falso
-node test/api-test.js                  # 46 comprobaciones
+node test/api-test.js                  # 48 comprobaciones
 kill %1
 PORT=3999 node test/server.js &
 python3 test/ui-test.py                # Playwright, 2 usuarios
@@ -57,4 +57,4 @@ kill %1
 ## Reglas
 - No imprimir ni guardar en archivos `MONGODB_URI` ni `AUTH_SECRET`.
 - No crear repos ni proyectos de pago sin confirmar con el usuario.
-- Si cambias `index.html`, súbele la versión (v4, v5…).
+- Si cambias `index.html`, súbele la versión (v6, v7…).
