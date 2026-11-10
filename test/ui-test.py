@@ -65,6 +65,14 @@ with sync_playwright() as p:
     import base64, tempfile, os
     png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
     tmp=os.path.join(tempfile.mkdtemp(),'recibo.png'); open(tmp,'wb').write(png)
+    # Lectura del recibo (OCR simulado): en un gasto nuevo rellena monto, detalle y fecha
+    A.click('#addExp'); A.wait_for_selector('#f_receipt')
+    with A.expect_file_chooser() as fc0: A.click('#sheetBody >> text=Galería')
+    fc0.value.set_files(tmp)
+    A.wait_for_function("document.querySelector('#f_amount').value==='12345'", timeout=10000)
+    check(A.input_value('#f_desc')=='Automercado' and A.input_value('#f_date')=='2026-11-08','OCR rellena detalle y fecha')
+    A.click('#sheetX')
+
     A.click('#expMount >> text=Automercado'); A.wait_for_selector('#f_receipt')
     with A.expect_file_chooser() as fc: A.click('#sheetBody >> text=Tomar foto')
     check(A.get_attribute('#f_receipt','capture')=='environment' and A.get_attribute('#f_receipt','accept')=='image/*','"Tomar foto" abre la cámara')

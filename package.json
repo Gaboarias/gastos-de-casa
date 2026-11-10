@@ -2,9 +2,12 @@
   "name": "casa-en-orden",
   "version": "3.0.0",
   "private": true,
-  "description": "Casa en Orden: despensa, recibos, gastos, notas y presupuesto privado.",
-  "engines": { "node": ">=20" },
+  "description": "Casa en Orden: despensa, recibos, gastos con foto y lectura del recibo, notas y presupuesto privado.",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.7.0",
     "bcryptjs": "2.4.3",
     "jose": "5.9.6",
     "mongodb": "6.10.0"

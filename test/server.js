@@ -82,12 +82,26 @@ require.cache[require.resolve(path.join(root, 'node_modules/mongodb'))].exports 
 process.env.MONGODB_URI = 'fake://';
 process.env.AUTH_SECRET = 'prueba-local-prueba-local-prueba-local-123456';
 process.env.MAX_USERS = '4';
+const PORT = Number(process.env.PORT) || 3999;
+// La lectura de recibos (api/ocr.js) habla con la API de Claude; aquí se simula en /v1/messages.
+process.env.ANTHROPIC_API_KEY = 'clave-de-prueba-local';
+process.env.ANTHROPIC_BASE_URL = 'http://localhost:' + PORT;
+
+// Respuesta simulada de la API de Claude: una imagen devuelve un recibo leído;
+// un PDF devuelve texto que no es JSON (para probar el error limpio).
+function fakeClaude(req, res, raw) {
+  let body = {};
+  try { body = JSON.parse(raw); } catch (e) {}
+  const first = body.messages && body.messages[0] && body.messages[0].content && body.messages[0].content[0];
+  const text = first && first.type === 'document' ? 'No pude leerlo.' : JSON.stringify({ amount: 12345, desc: 'Automercado', date: '2026-11-08' });
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ id: 'msg_prueba', type: 'message', role: 'assistant', model: body.model || 'x', content: [{ type: 'text', text }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }));
+}
 
 const handlers = {};
 for (const f of fs.readdirSync(path.join(root, 'api'))) handlers[f.replace(/\.js$/, '')] = require(path.join(root, 'api', f));
 const html = fs.readFileSync(path.join(root, 'index.html'));
 
-const PORT = Number(process.env.PORT) || 3999;
 http
   .createServer((req, res) => {
     const origSet = res.setHeader.bind(res);
@@ -98,11 +112,13 @@ http
       return res.end(html);
     }
     const m = u.pathname.match(/^\/api\/([a-z]+)$/);
-    if (!m || !handlers[m[1]]) { res.statusCode = 404; return res.end('no'); }
+    const isClaude = u.pathname === '/v1/messages';
+    if (!isClaude && (!m || !handlers[m[1]])) { res.statusCode = 404; return res.end('no'); }
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString();
+      if (isClaude) return fakeClaude(req, res, raw);
       if (raw && String(req.headers['content-type'] || '').includes('application/json')) {
         try { req.body = JSON.parse(raw); } catch (e) { req.body = undefined; }
       }

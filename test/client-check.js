@@ -153,7 +153,7 @@ function openSheet(cfg){
       c=h('input',{id:'f_'+f.id,type:'file',accept:'image/*,application/pdf',class:'sr',tabindex:-1});
       const fname=h('span',{class:'fname','aria-live':'polite'},'Nada seleccionado');
       const pick=(accept,capture)=>()=>{ c.setAttribute('accept',accept); if(capture) c.setAttribute('capture',capture); else c.removeAttribute('capture'); c.click(); };
-      c.addEventListener('change',()=>{ const fl=c.files&&c.files[0]; fname.textContent=fl?fl.name+' · '+fmtBytes(fl.size):'Nada seleccionado'; });
+      c.addEventListener('change',()=>{ const fl=c.files&&c.files[0]; fname.textContent=fl?fl.name+' · '+fmtBytes(fl.size):'Nada seleccionado'; if(fl&&f.onChange) f.onChange(fl,ctl,fname); });
       view=h('div',{class:'filepick'},
         h('div',{class:'chips'},
           h('button',{type:'button',class:'chip',onClick:pick('image/*','environment')},'Tomar foto'),
@@ -520,7 +520,9 @@ async function shrinkImage(file){
   }
   throw Object.assign(new Error('La foto es demasiado grande.'),{serverMsg:'La foto es demasiado grande.'});
 }
-async function uploadFile(file){
+const prepped=new WeakMap(); // comprime una sola vez aunque se lea y luego se suba
+async function prepFile(file){
+  if(prepped.has(file)) return prepped.get(file);
   let blob, mime;
   if(file.type==='application/pdf'){ blob=file; mime='application/pdf'; }
   else{
@@ -528,9 +530,31 @@ async function uploadFile(file){
     catch(e){ if(/^image\/(jpeg|png|webp)$/.test(file.type)&&file.size<=MAX_FILE){blob=file;mime=file.type;} else throw Object.assign(new Error('No se pudo leer la foto.'),{serverMsg:'No se pudo leer la foto.'}); }
   }
   if(blob.size>MAX_FILE) throw Object.assign(new Error('Archivo demasiado grande (máx. 1,5 MB).'),{serverMsg:'Archivo demasiado grande (máx. 1,5 MB).'});
+  const out={blob,mime}; prepped.set(file,out); return out;
+}
+async function uploadFile(file){
+  const {blob,mime}=await prepFile(file);
   toast('Subiendo recibo…');
   const r=await api('file',{op:'put',mime,b64:await blobB64(blob)});
   return {id:r.id,type:mime==='application/pdf'?'pdf':'image'};
+}
+// Lee el recibo con /api/ocr y rellena los campos vacíos del formulario (monto, detalle, fecha).
+async function readReceipt(file,ctl,status,isNew){
+  const prev=status.textContent; status.textContent='Leyendo recibo…';
+  try{
+    const {blob,mime}=await prepFile(file);
+    const r=await api('ocr',{mime,b64:await blobB64(blob)});
+    const filled=[];
+    if(r.amount&&ctl.amount&&!ctl.amount.value.trim()){ ctl.amount.value=r.amount; filled.push(money(r.amount)); }
+    if(r.desc&&ctl.desc&&!ctl.desc.value.trim()){ ctl.desc.value=r.desc; filled.push(r.desc); }
+    if(r.date&&ctl.date&&(!ctl.date.value||(isNew&&ctl.date.value===todayStr()))){ ctl.date.value=r.date; }
+    status.textContent=prev;
+    toast(filled.length?'Recibo leído: '+filled.join(' · '):(r.amount||r.desc?'Recibo leído; los campos ya tenían datos.':'No se pudo leer el recibo.'));
+  }catch(e){
+    status.textContent=prev;
+    if(e.status===503&&/configurar/.test(e.message||'')) return; // lectura no configurada: se omite sin molestar
+    toast(e.serverMsg||e.message||'No se pudo leer el recibo.');
+  }
 }
 const dropFile=id=>{ if(id) api('file',{op:'delete',id}).catch(()=>{}); };
 const fileUrl=id=>'/api/file?id='+encodeURIComponent(id);
@@ -557,7 +581,8 @@ function openExpSheet(x,preset){
   if(sp) fields.push({id:'split',label:'¿De quién es el gasto?',type:'select',options:sp,value:String(edit&&typeof x.split==='number'?x.split:50)});
   fields.push({id:'date',label:'Fecha',type:'date',required:true,value:edit?x.date:todayStr()});
   const hasR=edit&&!!x.receipt;
-  fields.push({id:'receipt',label:'Recibo',type:'file',hint:hasR?'Ya hay un recibo. Si eliges otro, lo reemplaza.':null});
+  fields.push({id:'receipt',label:'Recibo',type:'file',hint:hasR?'Ya hay un recibo. Si eliges otro, lo reemplaza.':'Al elegirlo se leen el total, el comercio y la fecha.',
+    onChange:(file,ctl,status)=>readReceipt(file,ctl,status,!edit)});
   const extra=[];
   if(hasR){
     extra.push({label:'Ver recibo',noClose:true,onClick:async()=>openReceipt(x)});

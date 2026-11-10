@@ -1,15 +1,15 @@
-# Casa en Orden (v7) — traspaso a Claude Code
+# Casa en Orden (v8) — traspaso a Claude Code
 
-Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v7`, span `.ver` en `index.html`).
+Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v8`, span `.ver` en `index.html`).
 
 ## Objetivo
-App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, presupuesto personal **privado** por persona, notas compartidas y foto/PDF del recibo en cada gasto. Va en Vercel con MongoDB, login propio con correo y contraseña.
+App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, presupuesto personal **privado** por persona, notas compartidas, foto/PDF del recibo en cada gasto y lectura automática del recibo (OCR con la API de Claude) que rellena monto, comercio y fecha. Va en Vercel con MongoDB, login propio con correo y contraseña.
 
 ## Estado (2026-11-06: desplegado y verificado)
 - Repo: `github.com/Gaboarias/gastos-de-casa` (rama `main`). Cada push a `main` despliega solo.
 - Vercel: proyecto `gastos-de-casa` en el equipo `garias1989-2231s-projects`. Producción: **https://gastos-de-casa-black.vercel.app** (`/api/health` → `{"ok":true,"secret":true}`).
 - MongoDB: instalado desde el Marketplace de Vercel (`npx vercel integration add mongodbatlas`), recurso `atlas-champagne-fence`; la integración pone `MONGODB_URI` sola. No hay cuenta de Atlas aparte.
-- Variables en Vercel (Production y Preview): `MONGODB_URI` (integración), `AUTH_SECRET` (sensible), `MAX_USERS=2`.
+- Variables en Vercel (Production y Preview): `MONGODB_URI` (integración), `AUTH_SECRET` (sensible), `MAX_USERS=2`, `ANTHROPIC_API_KEY` (sensible; la pone el usuario desde console.anthropic.com, sin ella la lectura de recibos responde 503 y la app la omite en silencio) y opcional `OCR_MODEL` (por defecto `claude-opus-5-5`; `claude-haiku-5-5` es más barato).
 - Verificado en producción con 2 cuentas de prueba (18 comprobaciones: hogar + código, despensa y gasto sincronizados, presupuesto privado invisible para el otro, tercera cuenta rechazada). Las cuentas de prueba ya se borraron; la base está vacía.
 - Las URLs de despliegue `*-garias1989-2231s-projects.vercel.app` piden login de Vercel; el dominio de producción no.
 
@@ -21,12 +21,13 @@ App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compa
 
 ## Arquitectura
 - `index.html`: SPA estática sin build (JS/CSS inline, ~64 KB). Pestañas Despensa / Recibos / Gastos / Presupuesto / Notas. Generada desde un artifact de claude.ai; el código del cliente que habla con la API está en `client-block.js`.
-- `api/*.js`: funciones serverless Node (CommonJS), `mongodb@6.10.0`, `bcryptjs@2.4.3`, `jose@5.9.6`, node ≥20.
+- `api/*.js`: funciones serverless Node (CommonJS), `mongodb@6.10.0`, `bcryptjs@2.4.3`, `jose@5.9.6`, `@anthropic-ai/sdk@1.7.0`, node ≥20.
   - `auth.js`: GET sesión (200 con `{user:null,household:null}` si no hay), POST `signup | login | logout`.
   - `household.js`: POST `create | join` (código de 6 chars `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, máx. 2 integrantes, unión atómica, límite de 10 intentos fallidos).
   - `sync.js`: GET devuelve todos los docs del hogar (`h:<hid>`) y privados (`u:<uid>`) más `members` sintetizado.
   - `doc.js`: POST `{op:'set'|'update'|'delete', col, id, data}` con validación.
   - `file.js`: recibos. POST `{op:'put',mime,b64}` (jpeg/png/webp/pdf, máx. 1,5 MB, se comprueba la cabecera del archivo) → `{id}`; POST `{op:'delete',id}`; GET `?id=` devuelve el archivo (solo integrantes del hogar). Colección `files {_id(hex24),scope,mime,size,data,createdBy,createdAt}`; máx. 1000 por hogar. El cliente ofrece botones "Tomar foto" (`capture=environment`), "Galería" y "PDF" sobre un único `<input type=file>` oculto, y reduce las fotos a 1600 px JPEG antes de subir; el gasto guarda `receipt` (id) y `receiptType` (`image|pdf`).
+  - `ocr.js`: lectura del recibo. POST `{mime,b64}` (jpeg/png/webp/pdf, máx. 1,5 MB) → `{amount,desc,date}` (null si no se distingue). Usa `@anthropic-ai/sdk` (`messages.create` con `output_config.format` json_schema y `effort:'low'`), `maxDuration` 60 s en `vercel.json`. En el cliente, `readReceipt` rellena solo los campos vacíos (la fecha solo si sigue en hoy en un gasto nuevo).
   - `health.js`: ping a la base.
 - `lib/`: `http.js` (`route`, `fail`, `bodyOf`; 405/415, no-store, errores uniformes), `db.js` (conexión cacheada en `global.__casaDb`, índices únicos), `auth.js` (JWT HS256 en cookie `ceo_session` HttpOnly/Secure/SameSite=Lax, 30 días).
 - Modelo en Mongo: `users {email,name,hash,hid,hidAt,joinFails}`, `households {code,members[]}`, `docs {scope,col,id,data,updatedAt}`.
@@ -40,13 +41,13 @@ App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compa
 Correr en **procesos de servidor separados** (el test de API consume `MAX_USERS=4`):
 ```
 PORT=3999 node test/server.js &        # servidor local con Mongo falso
-node test/api-test.js                  # 57 comprobaciones
+node test/api-test.js                  # 62 comprobaciones
 kill %1
 PORT=3999 node test/server.js &
 python3 test/ui-test.py                # Playwright, 2 usuarios
 kill %1
 ```
-`test/server.js` falsea `mongodb` en memoria y quita `; Secure` de la cookie solo para http local.
+`test/server.js` falsea `mongodb` en memoria, quita `; Secure` de la cookie solo para http local y simula la API de Claude en `/v1/messages` (`ANTHROPIC_BASE_URL` apunta al propio servidor; una imagen devuelve un recibo leído y un PDF una respuesta ilegible).
 
 ## Límites conocidos (decisiones tomadas)
 - Sin recuperación de contraseña, sin correo de confirmación, sin límite de intentos de login (solo el de unirse al hogar).
@@ -56,6 +57,6 @@ kill %1
 - Supabase se descartó (el usuario declinó); no tocar sus proyectos de Supabase.
 
 ## Reglas
-- No imprimir ni guardar en archivos `MONGODB_URI` ni `AUTH_SECRET`.
+- No imprimir ni guardar en archivos `MONGODB_URI`, `AUTH_SECRET` ni `ANTHROPIC_API_KEY`.
 - No crear repos ni proyectos de pago sin confirmar con el usuario.
-- Si cambias `index.html`, súbele la versión (v8, v9…).
+- Si cambias `index.html`, súbele la versión (v9, v10…).

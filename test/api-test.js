@@ -84,6 +84,13 @@ function client() {
   r = await A('file', { op: 'put', mime: 'image/png', b64: 'A'.repeat(2100000) }); ok(r.s === 413, 'archivo enorme = 413');
   g = await rawGet(A, 'file?id=zzz'); ok(g.status === 400, 'id de archivo inválido = 400');
 
+  // Lectura del recibo (OCR; la API de Claude está simulada en test/server.js)
+  r = await anon('ocr', { mime: 'image/png', b64: PNG }); ok(r.s === 401, 'ocr sin sesión = 401');
+  r = await A('ocr', { mime: 'text/html', b64: PNG }); ok(r.s === 400, 'ocr tipo no permitido = 400');
+  r = await A('ocr', { mime: 'image/png', b64: 'A'.repeat(2100000) }); ok(r.s === 413, 'ocr archivo enorme = 413');
+  r = await A('ocr', { mime: 'image/png', b64: PNG }); ok(r.s === 200 && r.j.amount === 12345 && r.j.desc === 'Automercado' && r.j.date === '2026-11-08', 'ocr devuelve total, comercio y fecha');
+  r = await A('ocr', { mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 prueba').toString('base64') }); ok(r.s === 502 && /No se pudo leer/.test(r.j.error), 'ocr con respuesta ilegible = error limpio');
+
   // Otro hogar
   r = await D('auth', { action: 'signup', email: 'vecino@casa.com', password: 'clave-segura-4', name: 'Vecino' }); ok(r.s === 200, 'signup D');
   r = await D('household', { action: 'create' }); ok(r.s === 200 && r.j.household.code !== code, 'D crea otro hogar');
