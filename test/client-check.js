@@ -143,18 +143,28 @@ function openSheet(cfg){
   const body=$('#sheetBody'); body.replaceChildren();
   const form=h('form',{novalidate:true}); const ctl={},err={};
   for(const f of cfg.fields){
-    let c;
+    let c, view=null;
     if(f.type==='select'){
       c=h('select',{id:'f_'+f.id},f.options.map(o=>h('option',{value:o[0],selected:String(o[0])===String(f.value)?true:null},o[1])));
     }else if(f.type==='textarea'){
       c=h('textarea',{id:'f_'+f.id,placeholder:f.placeholder,maxlength:f.max||5000,rows:6}); c.value=f.value==null?'':f.value;
     }else if(f.type==='file'){
-      c=h('input',{id:'f_'+f.id,type:'file',accept:f.accept||'image/*,application/pdf'});
+      // Botones explícitos: en Android/iOS el campo nativo con varios tipos no siempre ofrece la cámara.
+      c=h('input',{id:'f_'+f.id,type:'file',accept:'image/*,application/pdf',class:'sr',tabindex:-1});
+      const fname=h('span',{class:'fname','aria-live':'polite'},'Nada seleccionado');
+      const pick=(accept,capture)=>()=>{ c.setAttribute('accept',accept); if(capture) c.setAttribute('capture',capture); else c.removeAttribute('capture'); c.click(); };
+      c.addEventListener('change',()=>{ const fl=c.files&&c.files[0]; fname.textContent=fl?fl.name+' · '+fmtBytes(fl.size):'Nada seleccionado'; });
+      view=h('div',{class:'filepick'},
+        h('div',{class:'chips'},
+          h('button',{type:'button',class:'chip',onClick:pick('image/*','environment')},'Tomar foto'),
+          h('button',{type:'button',class:'chip',onClick:pick('image/*',null)},'Galería'),
+          h('button',{type:'button',class:'chip',onClick:pick('application/pdf',null)},'PDF')),
+        fname,c);
     }else{
       c=h('input',{id:'f_'+f.id,type:f.type||'text',value:f.value==null?'':f.value,placeholder:f.placeholder,inputmode:f.type==='number'?'decimal':null,step:f.type==='number'?'any':null,min:f.min,max:f.max,autocomplete:'off'});
     }
     ctl[f.id]=c; err[f.id]=h('p',{class:'ferr',hidden:true});
-    form.append(h('div',{class:'field'},h('label',{for:'f_'+f.id},f.label),c,f.hint?h('p',{class:'hint'},f.hint):null,err[f.id]));
+    form.append(h('div',{class:'field'},h('label',{for:'f_'+f.id},f.label),view||c,f.hint?h('p',{class:'hint'},f.hint):null,err[f.id]));
   }
   const collect=()=>{
     let ok=true; const vals={};
@@ -492,6 +502,7 @@ function splitNote(x){
 }
 /* ---------- Recibos (fotos/PDF) ---------- */
 const MAX_FILE=1500000;
+const fmtBytes=n=>n<1024?n+' B':n<1048576?Math.round(n/1024)+' KB':(n/1048576).toFixed(1).replace('.',',')+' MB';
 const blobB64=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(b);});
 async function loadBitmap(file){
   try{ return await createImageBitmap(file); }catch(e){}
@@ -546,7 +557,7 @@ function openExpSheet(x,preset){
   if(sp) fields.push({id:'split',label:'¿De quién es el gasto?',type:'select',options:sp,value:String(edit&&typeof x.split==='number'?x.split:50)});
   fields.push({id:'date',label:'Fecha',type:'date',required:true,value:edit?x.date:todayStr()});
   const hasR=edit&&!!x.receipt;
-  fields.push({id:'receipt',label:'Recibo',type:'file',hint:hasR?'Ya hay un recibo. Si eliges otro, lo reemplaza.':'Opcional: foto o PDF.'});
+  fields.push({id:'receipt',label:'Recibo',type:'file',hint:hasR?'Ya hay un recibo. Si eliges otro, lo reemplaza.':null});
   const extra=[];
   if(hasR){
     extra.push({label:'Ver recibo',noClose:true,onClick:async()=>openReceipt(x)});
