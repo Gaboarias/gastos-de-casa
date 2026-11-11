@@ -84,8 +84,11 @@ process.env.AUTH_SECRET = 'prueba-local-prueba-local-prueba-local-123456';
 process.env.MAX_USERS = '4';
 const PORT = Number(process.env.PORT) || 3999;
 // La lectura de recibos (api/ocr.js) habla con la API de Claude; aquí se simula en /v1/messages.
-process.env.ANTHROPIC_API_KEY = 'clave-de-prueba-local';
-process.env.ANTHROPIC_BASE_URL = 'http://localhost:' + PORT;
+// Con OCR_LOCAL=1 no hay clave y el navegador lee el recibo con Tesseract (necesita internet para el CDN).
+if (!process.env.OCR_LOCAL) {
+  process.env.ANTHROPIC_API_KEY = 'clave-de-prueba-local';
+  process.env.ANTHROPIC_BASE_URL = 'http://localhost:' + PORT;
+}
 
 // Respuesta simulada de la API de Claude: una imagen devuelve un recibo leído;
 // un PDF devuelve texto que no es JSON (para probar el error limpio).

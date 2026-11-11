@@ -4,8 +4,9 @@ const { route, fail, bodyOf } = require('../lib/http');
 const { getDb } = require('../lib/db');
 const A = require('../lib/auth');
 
-// Lectura automática del recibo (OCR) con la API de Claude: devuelve total, comercio y fecha
-// para rellenar el formulario de gasto. Solo integrantes del hogar. El archivo no se guarda aquí.
+// Lectura automática del recibo (OCR) con la API de Claude, solo si hay ANTHROPIC_API_KEY:
+// devuelve total, comercio y fecha para rellenar el formulario de gasto. Solo integrantes del
+// hogar. El archivo no se guarda aquí.
 const MAX_BYTES = 1500000;
 const MIMES = /^(image\/(jpeg|png|webp)|application\/pdf)$/;
 const MODEL = process.env.OCR_MODEL || 'claude-opus-5-5';
@@ -37,10 +38,13 @@ function parseOut(msg) {
   return { amount, desc: desc || null, date };
 }
 
-module.exports = route(['POST'], async (req) => {
+// GET: dice si la lectura en el servidor está disponible (hay clave). Si no, el cliente
+// lee el recibo en el propio navegador con Tesseract (tesseract.js), sin clave ni costo.
+module.exports = route(['GET', 'POST'], async (req) => {
   const db = await getDb();
   await A.requireHome(req, db);
   const key = process.env.ANTHROPIC_API_KEY;
+  if (req.method === 'GET') return { ok: true, enabled: !!key };
   if (!key) throw fail(503, 'Falta configurar la lectura de recibos');
 
   const b = bodyOf(req);

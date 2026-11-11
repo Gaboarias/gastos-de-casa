@@ -86,6 +86,8 @@ function client() {
 
   // Lectura del recibo (OCR; la API de Claude está simulada en test/server.js)
   r = await anon('ocr', { mime: 'image/png', b64: PNG }); ok(r.s === 401, 'ocr sin sesión = 401');
+  r = await anon('ocr'); ok(r.s === 401, 'GET ocr sin sesión = 401');
+  r = await A('ocr'); ok(r.s === 200 && r.j.enabled === true, 'GET ocr dice si hay lectura en el servidor');
   r = await A('ocr', { mime: 'text/html', b64: PNG }); ok(r.s === 400, 'ocr tipo no permitido = 400');
   r = await A('ocr', { mime: 'image/png', b64: 'A'.repeat(2100000) }); ok(r.s === 413, 'ocr archivo enorme = 413');
   r = await A('ocr', { mime: 'image/png', b64: PNG }); ok(r.s === 200 && r.j.amount === 12345 && r.j.desc === 'Automercado' && r.j.date === '2026-11-08', 'ocr devuelve total, comercio y fecha');

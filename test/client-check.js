@@ -538,21 +538,144 @@ async function uploadFile(file){
   const r=await api('file',{op:'put',mime,b64:await blobB64(blob)});
   return {id:r.id,type:mime==='application/pdf'?'pdf':'image'};
 }
-// Lee el recibo con /api/ocr y rellena los campos vacíos del formulario (monto, detalle, fecha).
+/* ---------- Lectura local del recibo: Tesseract (tesseract.js) y pdf.js en el navegador ---------- */
+const TESS_URL='https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
+const PDFJS_URL='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/pdf.min.mjs';
+const scripts=new Map();
+function loadScript(src){
+  if(!scripts.has(src)) scripts.set(src,new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.async=true;s.onload=res;
+    s.onerror=()=>{scripts.delete(src);rej(new Error('No se pudo cargar el lector de recibos. Revisa la conexión.'));};document.head.append(s);}));
+  return scripts.get(src);
+}
+let tess=null, tessIdle=0, tessProgress=null;
+async function tessWorker(){
+  await loadScript(TESS_URL);
+  if(!tess) tess=Tesseract.createWorker('spa',1,{logger:m=>{ if(tessProgress) tessProgress(m.status==='recognizing text'?m.progress:null); }}).catch(e=>{tess=null;throw e;});
+  return tess;
+}
+// Imagen para el lector: hasta 2400 px, en gris, con algo más de contraste.
+async function imageForOcr(file){
+  const im=await loadBitmap(file);
+  const w=im.width||im.naturalWidth, hgt=im.height||im.naturalHeight, k=Math.min(1,2400/Math.max(w,hgt));
+  const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w*k)); c.height=Math.max(1,Math.round(hgt*k));
+  const ctx=c.getContext('2d'); try{ ctx.filter='grayscale(1) contrast(1.25)'; }catch(e){}
+  ctx.drawImage(im,0,0,c.width,c.height); if(im.close) im.close();
+  return c;
+}
+async function ocrCanvas(canvas,onProgress){
+  const w=await tessWorker();
+  tessProgress=onProgress;
+  try{ const {data}=await w.recognize(canvas); return data.text||''; }
+  finally{
+    tessProgress=null; clearTimeout(tessIdle);
+    tessIdle=setTimeout(()=>{ const t=tess; tess=null; if(t) t.then(x=>x.terminate()).catch(()=>{}); },90000); // libera memoria si no se usa
+  }
+}
+// PDF: texto propio del documento (facturas electrónicas); si no tiene, se lee la primera página como imagen.
+async function pdfText(file,onProgress){
+  const pdfjs=await import(PDFJS_URL);
+  pdfjs.GlobalWorkerOptions.workerSrc=PDFJS_URL.replace('pdf.min.mjs','pdf.worker.min.mjs');
+  const doc=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  let out='';
+  for(let p=1;p<=Math.min(doc.numPages,3);p++){
+    const page=await doc.getPage(p), tc=await page.getTextContent();
+    let line='', y=null;
+    for(const it of tc.items){
+      if(typeof it.str!=='string') continue;
+      const iy=Math.round(it.transform[5]);
+      if(y!==null&&Math.abs(iy-y)>2){ out+=line+'\n'; line=''; }
+      line+=(line&&!/\s$/.test(line)&&!/^\s/.test(it.str)?' ':'')+it.str; y=iy;
+      if(it.hasEOL){ out+=line+'\n'; line=''; }
+    }
+    out+=line+'\n';
+  }
+  if(out.replace(/\s/g,'').length>=20) return out;
+  const page=await doc.getPage(1), vp=page.getViewport({scale:2.5});
+  const c=document.createElement('canvas'); c.width=Math.round(vp.width); c.height=Math.round(vp.height);
+  await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  return ocrCanvas(c,onProgress);
+}
+async function readLocal(file,mime,onProgress){
+  const text=mime==='application/pdf'?await pdfText(file,onProgress):await ocrCanvas(await imageForOcr(file),onProgress);
+  return parseReceipt(text,todayStr());
+}
+/* ocr-parse:start — saca total, comercio y fecha del texto de un recibo (también se prueba en test/ocr-parse-test.js) */
+const STORES=[['Automercado',/auto\s*mercado/i],['Walmart',/wal\s*-?\s*mart/i],['Más x Menos',/m[áa]s\s*x\s*menos/i],['Maxi Palí',/maxi\s*pal[ií]/i],['Palí',/\bpal[ií]\b/i],
+  ['PriceSmart',/price\s*smart/i],['Fresh Market',/fresh\s*market/i],['Pequeño Mundo',/peque[ñn]o\s*mundo/i],['EPA',/\bepa\b/],['Fischel',/fischel/i],['La Bomba',/\bla\s*bomba\b/i],
+  ['Sucre',/farmacia\s*sucre|\bsucre\b/i],['Megasuper',/mega\s*super/i],['AM PM',/\bam\s*\/?\s*pm\b/i],['Musmanni',/musmanni/i],['Vindi',/\bvindi\b/i],['Perimercados',/peri\s*mercados?/i],
+  ['Super Compro',/super\s*compro/i],['Universal',/\buniversal\b/i],['Cemaco',/\bcemaco\b/i],['El Rey',/\bel\s*rey\b/i],['Ferretería',/ferreter[ií]a/i],['Farmacia',/farmacia/i],['Feria',/feria\s*del\s*agricultor/i]];
+function parseNum(s){
+  s=String(s).replace(/[^\d.,]/g,''); if(!/\d/.test(s)) return null;
+  const i=Math.max(s.lastIndexOf('.'),s.lastIndexOf(','));
+  if(i<0) return Number(s);
+  const dec=s.slice(i+1), int=s.slice(0,i).replace(/[.,]/g,'');
+  if(dec.length===3) return Number(int+dec);      // separador de miles (12.345 / 1,234,567)
+  if(!dec.length||dec.length>3) return null;
+  return Number(int)+Number(dec)/Math.pow(10,dec.length);
+}
+const numsIn=l=>(l.match(/\d[\d.,]*\d|\d/g)||[]).map(parseNum).filter(n=>n!=null&&n>0&&n<1e9);
+function findTotal(lines){
+  const cands=[];
+  lines.forEach((l,i)=>{
+    const L=l.toLowerCase();
+    if(!/t[o0]tal/.test(L)||/sub\s*t[o0]tal|ahorr|descuento|art[ií]culos|items|unidades|impuesto|\biva\b|gravad|exent|puntos|cambio/.test(L)) return;
+    let nums=numsIn(l.replace(/t[o0]tal/i,''));
+    if(!nums.length&&lines[i+1]&&!/t[o0]tal/i.test(lines[i+1])) nums=numsIn(lines[i+1]); // el monto quedó en la línea siguiente
+    cands.push(...nums);
+  });
+  if(cands.length) return Math.max(...cands);
+  const dec=lines.flatMap(l=>l.match(/\d[\d.,]*[.,]\d{2}\b/g)||[]).map(parseNum).filter(n=>n!=null&&n>0&&n<1e9);
+  return dec.length?Math.max(...dec):null;
+}
+function findDate(text,today){
+  const re=/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})(?!\d)|(\d{4})-(\d{2})-(\d{2})(?!\d)/g, p=n=>String(n).padStart(2,'0'); let m;
+  while((m=re.exec(text))){
+    let d,mo,y;
+    if(m[4]){ y=+m[4]; mo=+m[5]; d=+m[6]; } else { d=+m[1]; mo=+m[2]; y=+m[3]; if(y<100) y+=2000; }
+    if(mo>12&&d<=12){ const t=d; d=mo; mo=t; }
+    if(mo<1||mo>12||d<1||d>31||y<2015||y>2099) continue;
+    const s=y+'-'+p(mo)+'-'+p(d);
+    if(today&&s>today) continue;
+    return s;
+  }
+  return null;
+}
+function findStore(lines){
+  const txt=lines.join('\n');
+  for(const [name,re] of STORES) if(re.test(txt)) return name;
+  for(const l of lines.slice(0,6)){
+    const t=l.replace(/[^\p{L}\p{N} .&'-]/gu,' ').replace(/\s+/g,' ').trim();
+    const letters=(t.match(/\p{L}/gu)||[]).length, digits=(t.match(/\d/g)||[]).length;
+    if(letters>=4&&letters>=digits*2&&!/factura|tiquete|electr|c[eé]dula|tel[eé]?f|fecha|caja|cliente|hora|sucursal|cajero|gracias|bienvenid|t[o0]tal|art[ií]culos/i.test(t))
+      return (t===t.toUpperCase()?t.toLowerCase().replace(/(^|[\s.'-])\p{L}/gu,c=>c.toUpperCase()):t).slice(0,40);
+  }
+  return null;
+}
+function parseReceipt(text,today){
+  const lines=String(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const amount=findTotal(lines);
+  return { amount:amount?Math.round(amount):null, desc:findStore(lines), date:findDate(lines.join('\n'),today) };
+}
+/* ocr-parse:end */
+// ¿Hay lectura en el servidor (clave de Claude)? Se consulta una vez por sesión; si no, se lee en el navegador.
+let ocrServer=null;
+const serverOcr=()=>ocrServer||(ocrServer=api('ocr').then(r=>!!(r&&r.enabled)).catch(()=>false));
+// Lee el recibo y rellena los campos vacíos del formulario (monto, detalle, fecha).
 async function readReceipt(file,ctl,status,isNew){
   const prev=status.textContent; status.textContent='Leyendo recibo…';
   try{
     const {blob,mime}=await prepFile(file);
-    const r=await api('ocr',{mime,b64:await blobB64(blob)});
+    let r;
+    if(await serverOcr()) r=await api('ocr',{mime,b64:await blobB64(blob)});
+    else r=await readLocal(file,mime,p=>{ status.textContent=p==null?'Preparando el lector…':'Leyendo recibo… '+Math.round(p*100)+'%'; });
     const filled=[];
     if(r.amount&&ctl.amount&&!ctl.amount.value.trim()){ ctl.amount.value=r.amount; filled.push(money(r.amount)); }
     if(r.desc&&ctl.desc&&!ctl.desc.value.trim()){ ctl.desc.value=r.desc; filled.push(r.desc); }
     if(r.date&&ctl.date&&(!ctl.date.value||(isNew&&ctl.date.value===todayStr()))){ ctl.date.value=r.date; }
     status.textContent=prev;
-    toast(filled.length?'Recibo leído: '+filled.join(' · '):(r.amount||r.desc?'Recibo leído; los campos ya tenían datos.':'No se pudo leer el recibo.'));
+    toast(filled.length?'Recibo leído: '+filled.join(' · '):(r.amount||r.desc?'Recibo leído; los campos ya tenían datos.':'No se pudo leer el recibo. Revisa el total.'));
   }catch(e){
     status.textContent=prev;
-    if(e.status===503&&/configurar/.test(e.message||'')) return; // lectura no configurada: se omite sin molestar
     toast(e.serverMsg||e.message||'No se pudo leer el recibo.');
   }
 }
