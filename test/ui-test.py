@@ -32,6 +32,8 @@ with sync_playwright() as p:
     n=A.evaluate("fetch('/api/sync').then(r=>r.json()).then(j=>j.docs.filter(d=>d.col==='inventory').length)")
     check(n==65,'A cargó la lista base (65 artículos, hay '+str(n)+')')
     check(A.is_visible('#invList >> text=Lechugas') and A.evaluate("document.querySelectorAll('#invTop .btn').length")==0,'lista base sin avisos de compra (mínimo 0)')
+    units=A.evaluate("fetch('/api/sync').then(r=>r.json()).then(j=>Object.fromEntries(j.docs.filter(d=>d.col==='inventory'&&['base-tomate','base-papa','base-arroz','base-lechugas'].includes(d.id)).map(d=>[d.id,d.data.unit])))")
+    check(units=={'base-tomate':'kg','base-papa':'kg','base-arroz':'unid.','base-lechugas':'unid.'},'frutas y verduras en kg, el resto por unidad: '+str(units))
     A.click('#loadBase') if A.query_selector('#loadBase') else None
     check(A.query_selector('#loadBase') is None,'el botón de lista base desaparece al tener artículos')
 

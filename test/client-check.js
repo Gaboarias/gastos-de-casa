@@ -14,7 +14,10 @@ const TABS=['despensa','recibos','gastos','presupuesto','notas'];
 // Lista base de la casa (lista-despensa-casa-en-orden.md): se carga con un botón cuando la despensa está vacía.
 const BASE_FOOD=['Lechugas','Patilla','Salmas','Galletas de soya','Yogur natural sin sabor','Limones','Uvas verdes','Manzanas verdes','Arroz','Arroz basmati','Garbanzos naturales','Lentejas','Pasta spaghetti de arroz','Petit pois','Ciruelas','Sardinas','Atún en trozos','Calamares','Risotto','Salsa de tomate Sacla','Fresco en polvo','Gelatina light','Harina de arroz','Mezcla para pancake gluten free','Masa para tortillas','Maizena / Vitamaíz','Salsa Worcestershire','Aderezo','Leche condensada','Leche deslactosada','Huevos','Queso crema','Jaleas','Quesos','Jamón','Salsa de soya sin gluten','Cacao sin azúcar en polvo','Mantequilla','Pasta de tomate','Salchichas','Papa','Yuca','Camote','Tomate','Chile dulce','Zanahoria','Rábano','Cebolla morada','Pepinos','Espinaca','Peras','Melocotones','Naranjas / mandarinas','Té','Sorbetos sin gluten','Galletas de arroz'];
 const BASE_CLEAN=['Papel higiénico','Toalla de cocina','Servilletas','Jabón de manos','Jabón lavaplatos','Cloro','Desinfectante','Vinagre blanco','Esponjas lavaplatos'];
-const BASE_LIST=[...BASE_FOOD.map(n=>[n,'comida']),...BASE_CLEAN.map(n=>[n,'limpieza'])];
+// Frutas y verduras de la lista base se llevan por kilo; el resto por unidad.
+const BASE_KG=new Set(['Patilla','Limones','Uvas verdes','Manzanas verdes','Ciruelas','Papa','Yuca','Camote','Tomate','Chile dulce','Zanahoria','Rábano','Cebolla morada','Pepinos','Espinaca','Peras','Melocotones','Naranjas / mandarinas']);
+const BASE_LIST=[...BASE_FOOD.map(n=>[n,'comida',BASE_KG.has(n)?'kg':'unid.']),...BASE_CLEAN.map(n=>[n,'limpieza','unid.'])];
+const baseSlug=n=>'base-'+norm(n).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 const catLabel=k=>(INV_CATS.find(c=>c[0]===k)||[0,'Otro'])[1];
 const budLabel=k=>(BUD_CATS.find(c=>c[0]===k)||[0,'Otros'])[1];
 const expLabel=k=>(EXP_CATS.find(c=>c[0]===k)||[0,'Otros'])[1];
@@ -261,15 +264,21 @@ function openItemSheet(it){
 }
 // Carga la lista base en la despensa (ids fijos "base-…", así no se duplica si se pulsa dos veces).
 let baseLoading=false;
+// Las frutas y verduras de la lista base cargadas antes de v10 quedaron en "unid."; se pasan a kg una vez.
+let unitsFixed=false;
+function fixBaseUnits(){
+  if(unitsFixed||!S.db||!S.inventory.length) return; unitsFixed=true;
+  const kgIds=new Set([...BASE_KG].map(baseSlug));
+  for(const it of S.inventory) if(kgIds.has(it.id)&&it.unit==='unid.'){ it.unit='kg'; S.db.doc('inventory/'+it.id).update({unit:'kg',updatedAt:iso()}).catch(()=>{}); }
+}
 async function loadBaseList(){
   if(baseLoading) return; baseLoading=true;
   const b=$('#loadBase'); if(b){b.disabled=true;b.textContent='Cargando…';}
-  const slug=n=>'base-'+norm(n).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
   try{
     await guard(async()=>{
       let done=0;
       for(let i=0;i<BASE_LIST.length;i+=8){
-        await Promise.all(BASE_LIST.slice(i,i+8).map(([name,cat])=>S.db.doc('inventory/'+slug(name)).set({name,cat,qty:1,unit:'unid.',min:0,target:null,expires:null,createdBy:S.uid||null,updatedAt:iso()})));
+        await Promise.all(BASE_LIST.slice(i,i+8).map(([name,cat,unit])=>S.db.doc('inventory/'+baseSlug(name)).set({name,cat,qty:1,unit,min:0,target:null,expires:null,createdBy:S.uid||null,updatedAt:iso()})));
         done=Math.min(i+8,BASE_LIST.length); if(b) b.textContent='Cargando… '+done+'/'+BASE_LIST.length;
       }
       toast('Lista base cargada: '+done+' artículos.');
@@ -1138,6 +1147,7 @@ async function init(){
   });
   listen('inventory',db.collection('inventory'),snap=>{
     S.inventory=docs(snap).map(o=>{const p=pending.get(o.id);if(p&&p.qty!=null)o.qty=p.qty;return o;});
+    fixBaseUnits();
   });
   listen('bills',db.collection('bills'),snap=>{S.bills=docs(snap);});
   listen('expenses',db.collection('expenses'),snap=>{S.expenses=docs(snap);});
