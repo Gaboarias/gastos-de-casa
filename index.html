@@ -158,7 +158,9 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);
   padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
 .nav-in{max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
-.nav button{background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:58px;padding:8px 4px;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-weight:500}
+.nav button{position:relative;background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:58px;padding:8px 4px;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-weight:500}
+.nav .badge{position:absolute;top:5px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--bad);color:var(--bad-ink);font:600 11px/18px var(--f-mono);text-align:center;box-shadow:0 0 0 2px var(--surface)}
+.nav .badge[hidden]{display:none}
 .nav button[aria-current="page"]{color:var(--accent);font-weight:600}
 .nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 
@@ -187,7 +189,7 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
 <main id="gate" class="gate" hidden></main>
 <div class="app" id="appRoot" hidden>
   <header class="top">
-    <h1>Casa en Orden<span class="ver">v10</span></h1>
+    <h1>Casa en Orden<span class="ver">v11</span></h1>
     <div class="people" id="people" aria-label="Personas del hogar"></div>
     <button type="button" class="btn ghost sm" id="logout">Salir</button>
   </header>
@@ -236,7 +238,7 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
 
 <nav class="nav" id="navRoot" aria-label="Secciones" hidden>
   <div class="nav-in">
-    <button type="button" data-tab="despensa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8l8-4 8 4v9l-8 4-8-4V8z"/><path d="M4 8l8 4 8-4M12 12v9"/></svg>Despensa</button>
+    <button type="button" data-tab="despensa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8l8-4 8 4v9l-8 4-8-4V8z"/><path d="M4 8l8 4 8-4M12 12v9"/></svg>Despensa<span class="badge" id="buyBadge" hidden></span></button>
     <button type="button" data-tab="recibos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg>Recibos</button>
     <button type="button" data-tab="gastos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11h10.2l2-8H6.2"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/></svg>Gastos</button>
     <button type="button" data-tab="presupuesto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/><path d="M4 7l11-3v3"/><circle cx="16" cy="13.5" r="1"/></svg>Presupuesto</button>
@@ -590,7 +592,12 @@ function renderInvList(){
   if(!rows.length){ m.append(emptyBox('Nada coincide','Prueba con otra búsqueda o cambia el tipo.')); return; }
   const list=h('div',{class:'list'}); rows.forEach(r=>list.append(invRow(r))); m.append(list);
 }
-function renderDespensa(){renderInvTop();renderInvList();}
+// Contador rojo en la pestaña Despensa: cuántos artículos están por comprar (agotados o bajo el mínimo).
+function renderBuyBadge(){
+  const n=S.status==='ok'&&S.ready.inventory?S.inventory.filter(needsBuy).length:0, b=$('#buyBadge');
+  b.hidden=!n; b.textContent=n>99?'99+':String(n); b.setAttribute('aria-label',n+' por comprar');
+}
+function renderDespensa(){renderInvTop();renderInvList();renderBuyBadge();}
 $('#q').addEventListener('input',ev=>{S.q=ev.target.value;renderInvList();});
 $('#invChips').addEventListener('click',ev=>{
   const b=ev.target.closest('.chip'); if(!b) return;

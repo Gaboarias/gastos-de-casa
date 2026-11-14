@@ -39,8 +39,10 @@ with sync_playwright() as p:
 
     # --- A: despensa
     A.click('#addItem'); A.fill('#f_name','Arroz'); A.fill('#f_qty','1'); A.fill('#f_min','2')
-    A.click('#sheetBody button[type=submit]'); A.wait_for_selector('#invList >> text=Arroz')
-    check('por comprar' in A.inner_text('#invTop').lower(),'A: arroz queda en Por comprar')
+    # (la lista base ya trae "Arroz": se espera al contador, no al nombre)
+    A.click('#sheetBody button[type=submit]'); A.wait_for_selector('#buyBadge:not([hidden])', timeout=10000)
+    check('1 por comprar' in A.inner_text('#invTop').lower(),'A: arroz queda en Por comprar')
+    check(A.inner_text('#buyBadge')=='1','contador rojo en la pestaña Despensa = 1')
 
     # --- B: cuenta y unirse
     B.goto(URL); B.wait_for_selector('#g_email')
@@ -55,6 +57,7 @@ with sync_playwright() as p:
     B.click('text=Comprado')
     A.wait_for_function("document.querySelectorAll('#invTop .btn').length===0", timeout=12000)
     check(True,'A ve que B repuso el arroz')
+    check(not A.is_visible('#buyBadge') and not B.is_visible('#buyBadge'),'el contador desaparece al reponer')
 
     # --- Gastos: B paga el súper
     B.click('[data-tab=gastos]'); B.click('#addExp'); B.fill('#f_amount','60000'); B.fill('#f_desc','Automercado')

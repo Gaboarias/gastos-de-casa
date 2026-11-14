@@ -336,7 +336,12 @@ function renderInvList(){
   if(!rows.length){ m.append(emptyBox('Nada coincide','Prueba con otra búsqueda o cambia el tipo.')); return; }
   const list=h('div',{class:'list'}); rows.forEach(r=>list.append(invRow(r))); m.append(list);
 }
-function renderDespensa(){renderInvTop();renderInvList();}
+// Contador rojo en la pestaña Despensa: cuántos artículos están por comprar (agotados o bajo el mínimo).
+function renderBuyBadge(){
+  const n=S.status==='ok'&&S.ready.inventory?S.inventory.filter(needsBuy).length:0, b=$('#buyBadge');
+  b.hidden=!n; b.textContent=n>99?'99+':String(n); b.setAttribute('aria-label',n+' por comprar');
+}
+function renderDespensa(){renderInvTop();renderInvList();renderBuyBadge();}
 $('#q').addEventListener('input',ev=>{S.q=ev.target.value;renderInvList();});
 $('#invChips').addEventListener('click',ev=>{
   const b=ev.target.closest('.chip'); if(!b) return;
