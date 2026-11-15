@@ -44,6 +44,19 @@ with sync_playwright() as p:
     check('1 por comprar' in A.inner_text('#invTop').lower(),'A: arroz queda en Por comprar')
     check(A.inner_text('#buyBadge')=='1','contador rojo en la pestaña Despensa = 1')
 
+    # --- Editar el nombre: desde "Por comprar" y desde la lista
+    A.click('#invTop >> text=Arroz'); A.wait_for_selector('#f_name')
+    check(A.input_value('#f_name')=='Arroz','Por comprar abre la edición del artículo')
+    A.fill('#f_name','Arroz integral'); A.click('#sheetBody button[type=submit]')
+    A.wait_for_selector('#invTop >> text=Arroz integral', timeout=10000)
+    check(A.query_selector('#invList .row-main .ed') is not None,'cada artículo muestra el lápiz de editar')
+    A.click('#invList >> text=Lechugas'); A.wait_for_selector('#f_name'); A.fill('#f_name','Lechuga romana'); A.click('#sheetBody button[type=submit]')
+    A.wait_for_selector('#invList >> text=Lechuga romana', timeout=10000)
+    nm=A.evaluate("fetch('/api/sync').then(r=>r.json()).then(j=>j.docs.find(d=>d.id==='base-lechugas').data.name)")
+    check(nm=='Lechuga romana','el nombre editado se guarda ('+str(nm)+')')
+    A.click('#invTop >> text=Arroz integral'); A.wait_for_selector('#f_name'); A.fill('#f_name','Arroz'); A.click('#sheetBody button[type=submit]')
+    A.wait_for_selector('#invTop >> text="Arroz"', timeout=10000)
+
     # --- B: cuenta y unirse
     B.goto(URL); B.wait_for_selector('#g_email')
     B.click('text=Crear cuenta'); B.fill('#g_name','Ana'); B.fill('#g_email','ana@casa.com'); B.fill('#g_pass','clave-segura-2')

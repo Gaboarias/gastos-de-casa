@@ -99,6 +99,7 @@ textarea{min-height:120px;padding:9px 10px;resize:vertical;line-height:1.45}
 .row:first-child{border-top:0}
 .row-main{display:block;min-width:0;width:100%;text-align:left;background:none;border:0;padding:11px 0 11px 14px;cursor:pointer}
 .row-main.static{cursor:default}
+.nm .ed{width:14px;height:14px;margin-left:6px;vertical-align:-2px;stroke:var(--ink-2);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .nm{font-weight:600;overflow-wrap:anywhere}
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:3px;font-size:12.5px;color:var(--ink-2)}
 .stepper{display:flex;align-items:center;gap:2px}
@@ -189,7 +190,7 @@ details.hist summary{cursor:pointer;font-size:13.5px;color:var(--ink-2);padding:
 <main id="gate" class="gate" hidden></main>
 <div class="app" id="appRoot" hidden>
   <header class="top">
-    <h1>Casa en Orden<span class="ver">v12</span></h1>
+    <h1>Casa en Orden<span class="ver">v13</span></h1>
     <div class="people" id="people" aria-label="Personas del hogar"></div>
     <button type="button" class="btn ghost sm" id="logout">Salir</button>
   </header>
@@ -542,13 +543,14 @@ async function loadBaseList(){
   }catch(e){ if(b){b.disabled=false;b.textContent='Cargar lista base ('+BASE_LIST.length+' artículos)';} }
   finally{ baseLoading=false; }
 }
+const editIcon=()=>{const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','ed');s.setAttribute('aria-hidden','true');s.innerHTML='<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/>';return s;};
 function invRow(it){
   const buy=needsBuy(it),ex=expState(it),pills=[];
   if(buy) pills.push(h('span',{class:'pill '+((it.qty||0)<=0?'bad':'warn')},(it.qty||0)<=0?'Agotado':'Bajo'));
   if(ex) pills.push(h('span',{class:'pill '+ex.kind},ex.text));
   return h('div',{class:'row'},
     h('button',{type:'button',class:'row-main',onClick:()=>openItemSheet(it),'aria-label':'Editar '+it.name},
-      h('div',{class:'nm'},it.name),
+      h('div',{class:'nm'},it.name,editIcon()),
       h('div',{class:'meta'},h('span',null,catLabel(it.cat)),pills)),
     h('div',{class:'stepper'},
       h('button',{type:'button','aria-label':'Quitar uno de '+it.name,onClick:()=>bumpQty(it.id,-1),disabled:(it.qty||0)<=0?true:null},'−'),
@@ -570,7 +572,7 @@ function renderInvTop(){
   if(buy.length){
     const list=h('div',{class:'list'});
     for(const it of buy) list.append(h('div',{class:'row'},
-      h('div',{class:'row-main static'},h('div',{class:'nm'},it.name),h('div',{class:'meta'},'Quedan '+fmtNum(it.qty)+' '+(it.unit||'')+' · faltan '+fmtNum(needQty(it)-(it.qty||0)))),
+      h('button',{type:'button',class:'row-main',onClick:()=>openItemSheet(it),'aria-label':'Editar '+it.name},h('div',{class:'nm'},it.name,editIcon()),h('div',{class:'meta'},'Quedan '+fmtNum(it.qty)+' '+(it.unit||'')+' · faltan '+fmtNum(needQty(it)-(it.qty||0)))),
       h('button',{type:'button',class:'btn sm',onClick:()=>restock(it),'aria-label':'Marcar comprado: '+it.name},'Comprado')));
     m.append(h('h3',{class:'sec'},'Por comprar'),list);
   }

@@ -286,13 +286,14 @@ async function loadBaseList(){
   }catch(e){ if(b){b.disabled=false;b.textContent='Cargar lista base ('+BASE_LIST.length+' artículos)';} }
   finally{ baseLoading=false; }
 }
+const editIcon=()=>{const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','ed');s.setAttribute('aria-hidden','true');s.innerHTML='<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/>';return s;};
 function invRow(it){
   const buy=needsBuy(it),ex=expState(it),pills=[];
   if(buy) pills.push(h('span',{class:'pill '+((it.qty||0)<=0?'bad':'warn')},(it.qty||0)<=0?'Agotado':'Bajo'));
   if(ex) pills.push(h('span',{class:'pill '+ex.kind},ex.text));
   return h('div',{class:'row'},
     h('button',{type:'button',class:'row-main',onClick:()=>openItemSheet(it),'aria-label':'Editar '+it.name},
-      h('div',{class:'nm'},it.name),
+      h('div',{class:'nm'},it.name,editIcon()),
       h('div',{class:'meta'},h('span',null,catLabel(it.cat)),pills)),
     h('div',{class:'stepper'},
       h('button',{type:'button','aria-label':'Quitar uno de '+it.name,onClick:()=>bumpQty(it.id,-1),disabled:(it.qty||0)<=0?true:null},'−'),
@@ -314,7 +315,7 @@ function renderInvTop(){
   if(buy.length){
     const list=h('div',{class:'list'});
     for(const it of buy) list.append(h('div',{class:'row'},
-      h('div',{class:'row-main static'},h('div',{class:'nm'},it.name),h('div',{class:'meta'},'Quedan '+fmtNum(it.qty)+' '+(it.unit||'')+' · faltan '+fmtNum(needQty(it)-(it.qty||0)))),
+      h('button',{type:'button',class:'row-main',onClick:()=>openItemSheet(it),'aria-label':'Editar '+it.name},h('div',{class:'nm'},it.name,editIcon()),h('div',{class:'meta'},'Quedan '+fmtNum(it.qty)+' '+(it.unit||'')+' · faltan '+fmtNum(needQty(it)-(it.qty||0)))),
       h('button',{type:'button',class:'btn sm',onClick:()=>restock(it),'aria-label':'Marcar comprado: '+it.name},'Comprado')));
     m.append(h('h3',{class:'sec'},'Por comprar'),list);
   }

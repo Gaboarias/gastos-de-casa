@@ -1,6 +1,6 @@
-# Casa en Orden (v12) — traspaso a Claude Code
+# Casa en Orden (v13) — traspaso a Claude Code
 
-Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v12`, span `.ver` en `index.html`).
+Responde en español, directo y conciso. Cada cambio al HTML sube el número de versión (hoy `v13`, span `.ver` en `index.html`).
 
 ## Objetivo
 App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compartidos (alquiler, servicios), gastos compartidos (súper y otros) con balance, presupuesto personal **privado** por persona, notas compartidas, foto/PDF del recibo en cada gasto, comprobante de pago (foto/PDF) en cada recibo mensual con quién pagó y cuándo, y lectura automática del recibo (OCR) que rellena monto, comercio y fecha: por defecto en el propio navegador con Tesseract (tesseract.js) y pdf.js, sin clave ni costo; si existe `ANTHROPIC_API_KEY`, se usa la API de Claude por ser más precisa. Va en Vercel con MongoDB, login propio con correo y contraseña.
@@ -36,7 +36,7 @@ App pequeña del hogar (2 cuentas por hogar): despensa/inventario, recibos compa
   - scope `u:<usuario>` = privado; el cliente usa prefijo `~`: `~` (solo id `budget`) y `~budget/entries`.
   - Doc máx. 20 000 caracteres; campos de `update` con regex `^[A-Za-z0-9_]{1,40}$`.
 - Recibos: `bills {name,amount,dueDay,split,createdBy}` y un `payments/<billId>_<aaaa-mm>` por mes `{billId,month,amount,paidBy,paidDate,receipt,receiptType}` (`paidBy` null = monto guardado sin pagar). `openPaySheet` tiene campo "Comprobante de pago" (mismo `uploadFile`/`openReceipt` que los gastos, con `kind:'Comprobante'`), botones "Ver/Quitar comprobante"; la fila muestra quién pagó, la fecha y un botón `.rcpt` "Comprobante". Quitar pago, quitar comprobante o borrar el recibo llaman `dropFile` para borrar el archivo.
-- Despensa: `needsBuy` = cantidad ≤ mínimo (`min`, por defecto 1 en artículos nuevos y 0 en la lista base): el artículo pasa arriba a "Por comprar" con etiqueta "Agotado" (cantidad 0) o "Bajo", no se borra; la pestaña Despensa muestra un contador rojo (`#buyBadge`, `renderBuyBadge`) con cuántos hay por comprar. Lista base `BASE_LIST` `[nombre, cat, unidad]`: frutas y verduras (`BASE_KG`) en `kg`, el resto `unid.`; `fixBaseUnits()` corrige una vez por sesión los ya cargados en `unid.`. Ids de la lista base: `baseSlug(nombre)` = `base-<slug>`.
+- Despensa: `needsBuy` = cantidad ≤ mínimo (`min`, por defecto 1 en artículos nuevos y 0 en la lista base): el artículo pasa arriba a "Por comprar" con etiqueta "Agotado" (cantidad 0) o "Bajo", no se borra. Tocar el nombre (en "Por comprar" o en la lista, con lápiz `editIcon`) abre `openItemSheet` para editar nombre, tipo, cantidades y vencimiento; la pestaña Despensa muestra un contador rojo (`#buyBadge`, `renderBuyBadge`) con cuántos hay por comprar. Lista base `BASE_LIST` `[nombre, cat, unidad]`: frutas y verduras (`BASE_KG`) en `kg`, el resto `unid.`; `fixBaseUnits()` corrige una vez por sesión los ya cargados en `unid.`. Ids de la lista base: `baseSlug(nombre)` = `base-<slug>`.
 - Cliente: `makeBackend(me)` imita `db.doc/collection/onSnapshot` sobre `/api/sync`; sondeo cada 6 s si la pestaña está visible, más al volver a la pestaña y tras cada escritura. Contador `seq` para descartar lecturas viejas.
 - Reparto de gastos: `shareOf(doc,id)` (split = % del primer integrante, por defecto 50). `balances()` suma pagos de recibos + gastos + liquidaciones.
 
