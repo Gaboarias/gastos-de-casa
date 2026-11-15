@@ -109,6 +109,30 @@ with sync_playwright() as p:
     B.click('#noteMount >> text=Pendientes'); B.wait_for_selector('#f_text'); B.fill('#f_text','Ya llamé'); B.click('#sheetBody button[type=submit]')
     A.wait_for_selector('#noteMount >> text=Ya llamé', timeout=12000); check(True,'A ve la edición de B')
 
+    # --- Recibos: A agrega el alquiler y lo marca pagado con comprobante; B lo ve
+    A.click('[data-tab=recibos]'); A.click('#addBill'); A.wait_for_selector('#f_name')
+    A.fill('#f_name','Alquiler'); A.fill('#f_amount','300000'); A.fill('#f_due','1')
+    A.click('#sheetBody button[type=submit]'); A.wait_for_selector('#billMount >> text=Alquiler')
+    A.click('#billMount >> text=Alquiler'); A.wait_for_selector('#f_receipt')
+    check(A.input_value('#f_amount')=='300000' and A.input_value('#f_paidBy')!='','el pago trae el monto y quién paga')
+    with A.expect_file_chooser() as fc3: A.click('#sheetBody >> text=Galería')
+    fc3.value.set_files(tmp); A.wait_for_selector('.fname >> text=recibo.png')
+    A.click('#sheetBody button[type=submit]'); A.wait_for_selector('#billMount .rcpt', timeout=15000)
+    t=A.inner_text('#billMount').replace('\u00a0',' ')
+    check('Pagado' in t and 'comprobante' in t.lower() and 'Tú' in t,'A ve el alquiler pagado por ella con comprobante (el botón va en mayúsculas por CSS)')
+    check('Ana te debe' in t and '120 000' in t,'balance: Ana le debe 120 000 (150 000 del alquiler - 30 000 del súper)')
+    B.click('[data-tab=recibos]'); B.wait_for_selector('#billMount .rcpt', timeout=12000)
+    check('Gabo' in B.inner_text('#billMount') and 'Pagado' in B.inner_text('#billMount'),'B ve que Gabo pagó el alquiler con comprobante')
+    B.click('#billMount .rcpt'); B.wait_for_selector('.rcpt-img'); check('Comprobante' in B.inner_text('#sheetTitle'),'B abre el comprobante'); B.click('#sheetX')
+    nb=B.evaluate("fetch('/api/sync').then(r=>r.json()).then(j=>j.docs.find(d=>d.col==='payments').data)")
+    check(nb.get('paidBy') and nb.get('receiptType')=='image' and bool(nb.get('receipt')),'el pago guarda quién pagó y el comprobante: '+str({k:nb.get(k) for k in ('paidBy','receiptType')}))
+    # Quitar el comprobante borra el archivo
+    rid=nb['receipt']; A.click('#billMount >> text=Alquiler'); A.wait_for_selector('#f_receipt')
+    A.click('#sheetBody >> text=Quitar comprobante'); A.click('#sheetBody >> text=Confirmar: quitar')
+    A.wait_for_function("!document.querySelector('#billMount .rcpt')", timeout=10000)
+    check('Pagado' in A.inner_text('#billMount'),'sin comprobante el pago sigue marcado')
+    A.wait_for_timeout(1500); check(A.context.request.get(URL+'api/file?id='+rid).status==404,'el archivo del comprobante se borra')
+
     # --- Persistencia: recargar A mantiene sesión y datos
     A.reload(); A.wait_for_selector('#appRoot:not([hidden])'); A.click('[data-tab=presupuesto]'); A.wait_for_selector('#budMount >> text=secreto-de-A')
     check(True,'A recarga y conserva sesión y datos')

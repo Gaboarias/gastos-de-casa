@@ -385,7 +385,7 @@ function openBillSheet(bill,preset){
         createdBy:bill&&bill.createdBy?bill.createdBy:(S.uid||null),updatedAt:iso()});
     }),
     extra:bill?[{label:'Eliminar recibo',confirm:'Confirmar: borrar recibo y pagos',onClick:()=>guard(async()=>{
-      for(const p of S.payments.filter(p=>p.billId===bill.id)) await S.db.doc('payments/'+p.id).delete();
+      for(const p of S.payments.filter(p=>p.billId===bill.id)){ await S.db.doc('payments/'+p.id).delete(); dropFile(p.receipt); }
       await S.db.doc('bills/'+bill.id).delete();
     })}]:[]
   });
@@ -394,19 +394,28 @@ function openPaySheet(bill,month){
   if(roBlock()) return;
   const pay=payMap().get(bill.id+'_'+month), ids=memberIds();
   const opts=ids.length?ids.map(i=>[i,nm(i)]):[['','Alguien']];
+  const hasR=!!(pay&&pay.receipt), proof=()=>({receipt:pay.receipt,receiptType:pay.receiptType,desc:bill.name+' · '+labelYM(month),kind:'Comprobante'});
   const save=(v,paid)=>guard(async()=>{
+    let receipt=hasR?pay.receipt:null, receiptType=hasR?(pay.receiptType||'image'):null;
+    if(v.receipt){ const up=await uploadFile(v.receipt); receipt=up.id; receiptType=up.type; }
     await S.db.doc('payments/'+bill.id+'_'+month).set({billId:bill.id,month,amount:v.amount,
-      paidBy:paid?(v.paidBy||S.uid||null):null,paidDate:paid?(v.paidDate||todayStr()):null,updatedAt:iso()});
+      paidBy:paid?(v.paidBy||S.uid||null):null,paidDate:paid?(v.paidDate||todayStr()):null,receipt,receiptType,updatedAt:iso()});
+    if(v.receipt){ toast(paid?'Pago guardado con comprobante.':'Comprobante guardado.'); if(hasR) dropFile(pay.receipt); }
   });
   const extra=[{label:'Guardar monto sin pagar',needsForm:true,onClick:v=>save(v,false)}];
-  if(pay) extra.push({label:pay.paidBy?'Quitar pago':'Quitar monto',confirm:'Confirmar: quitar',onClick:()=>guard(async()=>{await S.db.doc('payments/'+pay.id).delete();})});
+  if(hasR){
+    extra.push({label:'Ver comprobante',noClose:true,onClick:async()=>openReceipt(proof())});
+    extra.push({label:'Quitar comprobante',confirm:'Confirmar: quitar',onClick:()=>guard(async()=>{await S.db.doc('payments/'+pay.id).update({receipt:null,receiptType:null,updatedAt:iso()});dropFile(pay.receipt);})});
+  }
+  if(pay) extra.push({label:pay.paidBy?'Quitar pago':'Quitar monto',confirm:'Confirmar: quitar',onClick:()=>guard(async()=>{await S.db.doc('payments/'+pay.id).delete();dropFile(pay.receipt);})});
   extra.push({label:'Editar recibo',noClose:true,onClick:async()=>{openBillSheet(bill);}});
   openSheet({
     title:bill.name+' · '+labelYM(month), submitLabel:pay&&pay.paidBy?'Actualizar pago':'Marcar pagado',
     fields:[
       {id:'amount',label:'Monto de este mes (₡)',type:'number',required:true,min:0,value:pay?pay.amount:(bill.amount||''),hint:splitHint(bill)},
       {id:'paidBy',label:'Pagó',type:'select',options:opts,value:(pay&&pay.paidBy)||S.uid||ids[0]||''},
-      {id:'paidDate',label:'Fecha de pago',type:'date',value:(pay&&pay.paidDate)||todayStr()}
+      {id:'paidDate',label:'Fecha de pago',type:'date',value:(pay&&pay.paidDate)||todayStr()},
+      {id:'receipt',label:'Comprobante de pago',type:'file',hint:hasR?'Ya hay un comprobante. Si eliges otro, lo reemplaza.':'Foto o PDF de la transferencia, el SINPE o el recibo pagado.'}
     ],
     onSubmit:v=>save(v,true), extra
   });
@@ -480,7 +489,8 @@ function renderRecibos(){
     if(p&&p.paidBy) meta.push(h('span',null,nm(p.paidBy)+(p.paidDate?' · '+shortDate(p.paidDate):'')));
     list.append(h('div',{class:'row'},
       h('button',{type:'button',class:'row-main',onClick:()=>openPaySheet(b,S.month),'aria-label':b.name+': registrar pago'},h('div',{class:'nm'},b.name),h('div',{class:'meta'},meta)),
-      h('div',{class:'right'},h('div',{class:'amt'},amt>0?money(amt):'—'),pill)));
+      h('div',{class:'right'},h('div',{class:'amt'},amt>0?money(amt):'—'),pill,
+        p&&p.receipt?h('button',{type:'button',class:'rcpt','aria-label':'Ver comprobante de '+b.name,onClick:()=>openReceipt({receipt:p.receipt,receiptType:p.receiptType,desc:b.name+' · '+labelYM(S.month),kind:'Comprobante'})},rcptIcon(),'Comprobante'):null)));
   }
   m.append(list);
 
@@ -698,9 +708,10 @@ const fileUrl=id=>'/api/file?id='+encodeURIComponent(id);
 function openReceipt(x){
   if(x.receiptType==='pdf'){ window.open(fileUrl(x.receipt),'_blank','noopener'); return; }
   if($('#overlay').hidden) lastFocus=document.activeElement;
-  $('#sheetTitle').textContent='Recibo · '+(x.desc||expLabel(x.cat));
+  const kind=x.kind||'Recibo', label=x.desc||expLabel(x.cat);
+  $('#sheetTitle').textContent=kind+' · '+label;
   const body=$('#sheetBody'); body.replaceChildren();
-  body.append(h('img',{class:'rcpt-img',src:fileUrl(x.receipt),alt:'Recibo de '+(x.desc||expLabel(x.cat))}),
+  body.append(h('img',{class:'rcpt-img',src:fileUrl(x.receipt),alt:kind+' de '+label}),
     h('div',{class:'actions'},h('a',{class:'btn ghost',href:fileUrl(x.receipt),target:'_blank',rel:'noopener'},'Abrir en pestaña nueva')));
   $('#overlay').hidden=false;
 }
